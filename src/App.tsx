@@ -26,7 +26,6 @@ import {
   Layers3,
   LayoutDashboard,
   ListChecks,
-  LoaderCircle,
   LockKeyhole,
   Menu,
   Package,
@@ -36,9 +35,7 @@ import {
   Server,
   Settings2,
   ShieldCheck,
-  SquareTerminal,
   X,
-  XCircle,
 } from "lucide-react";
 import {
   projects as initialProjects,
@@ -48,6 +45,7 @@ import {
   backups as initialBackups,
   nextVersion,
   planSteps,
+  jenkinsProfiles as initialJenkinsProfiles,
 } from "./data";
 import type {
   Backup,
@@ -59,6 +57,8 @@ import type {
   Release,
   SqlScript,
   Component,
+  Service,
+  JenkinsProfile,
 } from "./types";
 import {
   Badge,
@@ -72,7 +72,13 @@ import {
   SectionHeading,
   downloadText,
 } from "./ui";
-import EnvironmentEditor from "./EnvironmentEditor";
+import EnvironmentEditor from "./EnvironmentConfigEditor";
+import ServiceManager, {
+  ProjectServiceFields,
+  VersionServiceDialog,
+} from "./ServiceManager";
+import JenkinsSettings from "./JenkinsSettings";
+import PublishDialog, { DeploymentDetail } from "./PublishDialog";
 
 type Dialog =
   | "project"
@@ -90,6 +96,7 @@ type Dialog =
 const navigation = [
   { id: "overview", title: "项目概览", icon: LayoutDashboard },
   { id: "projects", title: "全部项目", icon: FolderGit2 },
+  { id: "services", title: "服务管理", icon: Code2 },
   { id: "versions", title: "版本管理", icon: Layers3 },
   { id: "environments", title: "环境连接", icon: Server },
   { id: "deployments", title: "部署记录", icon: History },
@@ -100,9 +107,8 @@ const releaseTabs = [
   { id: "summary", label: "变更概览", icon: Blocks },
   { id: "sql", label: "数据库脚本", icon: Database },
   { id: "configs", label: "配置文件", icon: FileText },
-  { id: "components", label: "组件仓库", icon: GitBranch },
-  { id: "steps", label: "部署步骤", icon: ListChecks },
-  { id: "history", label: "发布记录", icon: History },
+  { id: "components", label: "版本服务", icon: GitBranch },
+  { id: "steps", label: "操作说明", icon: ListChecks },
 ];
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const unique = (prefix: string) =>
@@ -117,6 +123,12 @@ const stamp = () =>
   }).format(new Date());
 
 export default function App() {
+  const [projectServiceDrafts, setProjectServiceDrafts] = useState<Service[]>(
+    [],
+  );
+  const [jenkinsProfiles, setJenkinsProfiles] = useState<JenkinsProfile[]>(
+    clone(initialJenkinsProfiles),
+  );
   const [projects, setProjects] = useState<Project[]>(clone(initialProjects));
   const [releases, setReleases] = useState<Release[]>(clone(initialReleases));
   const [environments, setEnvironments] = useState<Environment[]>(
@@ -147,13 +159,8 @@ export default function App() {
     null,
   );
   const [detailBackup, setDetailBackup] = useState<Backup | null>(null);
-  const [selectedStep, setSelectedStep] = useState(0);
   const [toast, setToast] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [demoState, setDemoState] = useState<"idle" | "running" | "done">(
-    "idle",
-  );
-  const [demoStep, setDemoStep] = useState(0);
   const [aiFormat, setAiFormat] = useState("Markdown");
   const [includeSql, setIncludeSql] = useState(true);
   const [includeConfigs, setIncludeConfigs] = useState(true);
@@ -161,6 +168,7 @@ export default function App() {
   const [recordFilter, setRecordFilter] = useState("全部");
 
   const project = projects.find((item) => item.id === projectId) || projects[0];
+  const projectServices = project.services;
   const projectReleases = releases.filter(
     (item) => item.projectId === projectId,
   );
@@ -191,33 +199,6 @@ export default function App() {
     const timer = setTimeout(() => setToast(""), 4200);
     return () => clearTimeout(timer);
   }, [toast]);
-  useEffect(() => {
-    if (dialog !== "deploy" || demoState !== "running") return;
-    const timer = setTimeout(() => {
-      if (demoStep < planSteps.length - 1)
-        setDemoStep((previous) => previous + 1);
-      else {
-        setDemoState("done");
-        if (release && environment)
-          setDeployments((previous) => [
-            {
-              id: `DEMO-${previous.length + 1}`,
-              projectId,
-              versionId: release.id,
-              environmentId: environment.id,
-              status: "成功",
-              started: stamp(),
-              duration: "流程演示",
-              actor: "页面演示",
-              steps: clone(planSteps),
-            },
-            ...previous,
-          ]);
-      }
-    }, 700);
-    return () => clearTimeout(timer);
-  }, [dialog, demoState, demoStep, release, environment, projectId]);
-
   function navigate(destination: Page) {
     setPage(destination);
     setVersionOpen(false);
@@ -250,20 +231,12 @@ export default function App() {
   }
   function showDeployment(item: Deployment) {
     setDetailDeployment(item);
-    setSelectedStep(item.status === "失败" ? 3 : 0);
     setDialog("deployment-detail");
   }
-  function openDeploy(item?: Release) {
-    if (item) setReleaseId(item.id);
-    setDemoState("idle");
-    setDemoStep(0);
+  function openDeploy() {
     setDialog("deploy");
   }
   function closeDialog() {
-    if (demoState === "running") {
-      setDemoState("idle");
-      notify("已结束流程演示，没有执行真实发布。");
-    }
     setDialog(null);
   }
   async function copy(value: string) {
@@ -276,52 +249,48 @@ export default function App() {
   }
 
   const context = useMemo(() => {
-    if (!release) return "请先创建一个版本，再生成外部 AI 资料。";
     const data = {
-      notice: "前端样稿的示例数据，仅供需求评审；不包含账号密码或 Token。",
-      project: { name: project.name, key: project.key },
-      release: {
-        name: release.name,
-        title: release.title,
-        status: release.status,
+      notice: "前端样稿的示例资料，不含密码、私钥或 Token。",
+      project: {
+        name: project.name,
+        key: project.key,
+        services: project.services,
       },
-      components: release.components,
-      ...(includeSql
+      release: release
         ? {
-            sqlScripts: release.scripts.map((item) => ({
-              name: item.name,
-              database: item.database,
-              order: item.order,
-              content: item.sql,
-            })),
+            name: release.name,
+            title: release.title,
+            status: release.status,
+            services: release.components,
           }
-        : {}),
-      ...(includeConfigs
-        ? {
-            configurations: release.configs.map((item) => ({
-              name: item.name,
-              path: item.path,
-              content: item.content,
-            })),
-          }
-        : {}),
+        : null,
+      allowedActions: [
+        "读取项目和版本资料",
+        "选择环境、服务及支持的分支，触发已绑定 Jenkins Job",
+      ],
+      manualActions: ["SQL 由人工执行", "配置文件由人工更新"],
+      ...(includeSql ? { sqlScripts: release?.scripts || [] } : {}),
+      ...(includeConfigs ? { configurations: release?.configs || [] } : {}),
       ...(includeEnvironment
         ? {
             environment: environment
               ? {
                   name: environment.name,
-                  host: environment.host,
+                  servers: environment.servers.map((s) => ({
+                    name: s.name,
+                    host: s.host,
+                  })),
                   deployPath: environment.deployPath,
                   database: environment.database,
-                  jenkinsJob: environment.job,
-                  credentials: "[通过本地凭据引用获取，不导出秘密值]",
+                  jobs: environment.bindings,
+                  credentials: "只引用本地凭据，不导出秘密",
                 }
               : null,
           }
         : {}),
     };
     if (aiFormat === "JSON") return JSON.stringify(data, null, 2);
-    return `# ${project.name} · ${release.name}\n\n> 示例资料，仅供页面评审；不含账号密码和 Token。\n\n## 版本\n\n${release.title}\n状态：${release.status}\n\n## 代码组件\n\n${release.components.map((item) => `- ${item.name}：${item.branch} / ${item.commit}\n  产物：${item.artifact}`).join("\n")}\n${includeEnvironment && environment ? `\n## 目标环境\n\n- 环境：${environment.name}\n- 主机：${environment.host}\n- 发布路径：${environment.deployPath}\n- 数据库：${environment.database}\n- Jenkins Job：${environment.job}\n- 凭据：仅保留本地引用，未导出秘密\n` : ""}${includeSql ? `\n## 版本 SQL\n${release.scripts.map((item) => `\n### ${item.order}. ${item.name}\n\n逻辑数据库：${item.database}\n\n\`\`\`sql\n${item.sql}\n\`\`\`\n`).join("")}` : ""}${includeConfigs ? `\n## 配置文件\n${release.configs.map((item) => `\n### ${item.name}\n\n目标路径：${item.path}\n\n\`\`\`\n${item.content}\n\`\`\`\n`).join("")}` : ""}`;
+    return `# ${project.name} · ${release?.name || "项目资料"}\n\n> 前端样稿示例，无真实连接与凭据。\n\n## 可调用范围\n\n选择环境和服务，仅触发 Jenkins Job；支持分支参数的任务可指定分支。不执行 SQL，不更新配置，不进行 SSH 部署。\n\n## 项目服务\n\n${project.services.map((s) => `- ${s.name}（${s.kind}）：${s.repository}，默认分支 ${s.defaultBranch}`).join("\n")}\n\n## 版本资料\n\n${release?.title || "暂无版本"}\n${release?.components.map((c) => `- ${c.name}：${c.branch} / ${c.commit || "未登记提交"}`).join("\n") || ""}\n${includeEnvironment && environment ? `\n## 目标环境与任务\n\n${environment.name} · ${environment.servers.map((s) => s.host).join("、")}\n共用路径：${environment.deployPath}\n数据库：${environment.database}\n${environment.bindings.map((b) => `- ${project.services.find((s) => s.id === b.serviceId)?.name || b.serviceId}：${b.job || "未绑定"}；${b.supportsBranch ? `分支参数 ${b.branchParameter}，可选 ${b.branches.join(" / ")}` : "使用 Job 自身配置"}；固定参数 ${b.parameters || "无"}`).join("\n")}\n` : ""}${includeSql ? `\n## SQL（人工执行）\n${release?.scripts.map((s) => `\n### ${s.name}\n\n${s.sql}\n`).join("\n") || "暂无脚本"}` : ""}${includeConfigs ? `\n## 配置文件（人工更新）\n${release?.configs.map((c) => `\n### ${c.name} · ${c.path}\n\n${c.content}\n`).join("\n") || "暂无配置文件"}` : ""}`;
   }, [
     release,
     project,
@@ -367,7 +336,7 @@ export default function App() {
                 </td>
                 <td>
                   <div className="resource-counts">
-                    <span title="代码组件">
+                    <span title="版本服务">
                       <GitBranch size={13} />
                       {item.components.length}
                     </span>
@@ -423,7 +392,7 @@ export default function App() {
           <thead>
             <tr>
               <th>发布记录</th>
-              <th>版本</th>
+              <th>服务 / 分支</th>
               <th>目标环境</th>
               <th>结果</th>
               <th>开始时间 / 耗时</th>
@@ -443,10 +412,17 @@ export default function App() {
                   <small className="table-subtext">{item.actor}</small>
                 </td>
                 <td>
-                  <code>
-                    {releases.find((value) => value.id === item.versionId)
-                      ?.name || "—"}
-                  </code>
+                  <div className="record-services">
+                    {item.services.map((service) => (
+                      <span key={service.serviceId}>
+                        <strong>{service.name}</strong>
+                        <small>
+                          {service.branch || "Job 自身配置"} · #
+                          {service.buildNumber}
+                        </small>
+                      </span>
+                    ))}
+                  </div>
                 </td>
                 <td>
                   {environments.find((value) => value.id === item.environmentId)
@@ -474,7 +450,10 @@ export default function App() {
         </table>
       </div>
     ) : (
-      <Empty title="暂无部署记录" detail="发布记录会按版本和环境分别保留。" />
+      <Empty
+        title="暂无部署记录"
+        detail="按环境、服务及 Jenkins 构建结果保留记录。"
+      />
     );
   }
 
@@ -540,7 +519,7 @@ export default function App() {
             <span>最近发布</span>
             <strong className="status-stat">
               {projectDeployments[0] ? (
-                projectDeployments[0].status === "失败" ? (
+                projectDeployments[0].status !== "成功" ? (
                   <>
                     <i className="status-dot red" />
                     需要关注
@@ -567,7 +546,7 @@ export default function App() {
             <section className="panel">
               <SectionHeading
                 title="环境发布情况"
-                description="同一版本跨环境复用，发布状态分别记录"
+                description="项目内维护服务器和任务，按服务查看 Jenkins 构建结果"
                 action={
                   <button
                     className="text-button"
@@ -590,25 +569,14 @@ export default function App() {
                       </span>
                       <span className="muted mono">{item.key}</span>
                     </div>
-                    <p className="env-version-label">最后完整成功版本</p>
-                    <button
-                      className="env-version"
-                      onClick={() => {
-                        const found = releases.find(
-                          (value) =>
-                            value.projectId === projectId &&
-                            value.name === item.currentVersion,
-                        );
-                        if (found) openRelease(found.id);
-                      }}
-                    >
-                      {item.currentVersion || "尚未发布"}
-                      <ArrowUpRight size={17} />
-                    </button>
+                    <p className="env-version-label">环境服务器</p>
+                    <div className="env-version">
+                      {item.servers.length} 台 Linux 节点
+                    </div>
                     <div className="environment-card-meta">
                       <span>
                         <Server size={13} />
-                        {item.host}
+                        {item.servers.map((server) => server.host).join(" / ")}
                       </span>
                       <span>
                         <Database size={13} />
@@ -618,7 +586,7 @@ export default function App() {
                     <div className="environment-card-footer">
                       <span className="muted">
                         <Clock3 size={12} />
-                        检查于 {item.checkedAt}
+                        {item.checkedAt}
                       </span>
                       <button
                         className="text-button"
@@ -645,21 +613,23 @@ export default function App() {
                   />
                 )}
               </div>
-              {projectDeployments.find((item) => item.status === "失败") && (
+              {projectDeployments.find((item) => item.status !== "成功") && (
                 <div className="deployment-alert">
                   <span className="alert-icon">
                     <Info size={16} />
                   </span>
                   <div>
-                    <strong>生产环境上次发布未完成</strong>
-                    <p>停在配置文件更新，已执行步骤与备份可在记录中查看。</p>
+                    <strong>最近有服务构建失败</strong>
+                    <p>
+                      部分 Jenkins 任务构建失败，可按服务查看结果与控制台资料。
+                    </p>
                   </div>
                   <button
                     className="text-button"
                     onClick={() =>
                       showDeployment(
                         projectDeployments.find(
-                          (item) => item.status === "失败",
+                          (item) => item.status !== "成功",
                         )!,
                       )
                     }
@@ -703,7 +673,7 @@ export default function App() {
                   }
                 >
                   <GitBranch size={16} />
-                  <span>代码组件</span>
+                  <span>版本服务</span>
                   <b>{release?.components.length || 0}</b>
                   <ChevronRight size={13} />
                 </button>
@@ -739,7 +709,8 @@ export default function App() {
               <ShieldCheck size={20} />
               <h3>一份版本，完整追溯</h3>
               <p>
-                SQL、配置与代码提交固定到版本，环境只维护目标连接和发布路径。
+                版本保存 SQL、配置与服务变化；发布只触发所选服务的 Jenkins
+                Job，SQL 和配置由人工处理。
               </p>
               <button className="text-button" onClick={() => setDialog("help")}>
                 了解页面流程
@@ -761,9 +732,15 @@ export default function App() {
             <h1>
               全部项目<span className="heading-count">{projects.length}</span>
             </h1>
-            <p>每个项目独立管理组件、环境与版本资源。</p>
+            <p>每个项目独立管理服务、环境与版本资源。</p>
           </div>
-          <Button variant="primary" onClick={() => setDialog("project")}>
+          <Button
+            variant="primary"
+            onClick={() => {
+              setProjectServiceDrafts([]);
+              setDialog("project");
+            }}
+          >
             <Plus size={17} />
             新建项目
           </Button>
@@ -820,7 +797,10 @@ export default function App() {
             ))}
           <button
             className="new-project-card"
-            onClick={() => setDialog("project")}
+            onClick={() => {
+              setProjectServiceDrafts([]);
+              setDialog("project");
+            }}
           >
             <span>
               <Plus size={24} />
@@ -890,7 +870,8 @@ export default function App() {
           </div>
         </section>
         <Note>
-          就绪版本固定发布内容。测试与生产复用同一版本，各环境的部署记录分别保留。
+          版本固定变更资料并可跨环境参考。Jenkins
+          发布独立选择环境、服务和分支，SQL 与配置由人工处理。
         </Note>
       </>
     );
@@ -954,11 +935,7 @@ export default function App() {
                 复制为新版本
               </Button>
             )}
-            <Button
-              variant="primary"
-              disabled={release.status === "已归档"}
-              onClick={() => openDeploy()}
-            >
+            <Button variant="primary" onClick={() => openDeploy()}>
               <Play size={15} />
               预览发布
             </Button>
@@ -1002,7 +979,7 @@ export default function App() {
                       <GitBranch size={20} />
                     </span>
                     <div>
-                      <strong>{release.components.length} 个代码组件</strong>
+                      <strong>{release.components.length} 个版本服务</strong>
                       <small>分支、固定提交与构建产物</small>
                     </div>
                     <ChevronRight size={16} />
@@ -1066,11 +1043,11 @@ export default function App() {
                 </div>
               </div>
               <aside className="release-summary-aside">
-                <h3>发布检查</h3>
+                <h3>版本资料</h3>
                 <div className="release-checks">
                   <span>
                     <CheckCircle2 size={15} />
-                    代码提交已固定
+                    代码变化按服务登记
                   </span>
                   <span>
                     <CheckCircle2 size={15} />
@@ -1090,14 +1067,14 @@ export default function App() {
                   </span>
                 </div>
                 <div className="info-divider" />
-                <h3>可发布到</h3>
+                <h3>项目环境</h3>
                 {projectEnvironments.map((item) => (
                   <div key={item.id} className="ready-environment">
                     <span
                       className={`env-dot ${item.type === "生产" ? "orange" : "blue"}`}
                     />
                     {item.name}
-                    <code>{item.currentVersion || "未发布"}</code>
+                    <code>{item.servers.length} 台服务器</code>
                   </div>
                 ))}
                 <p className="small muted">
@@ -1116,7 +1093,7 @@ export default function App() {
                       {release.scripts.length}
                     </span>
                   </h3>
-                  <p>管理本版本的增量 SQL、目标库与变化内容。</p>
+                  <p>管理本版本的增量 SQL、目标库与变化内容；由人工执行。</p>
                 </div>
                 <Button
                   disabled={!editable}
@@ -1261,7 +1238,7 @@ export default function App() {
                       {release.configs.length}
                     </span>
                   </h3>
-                  <p>文件内容固定到版本，目标路径按环境解析。</p>
+                  <p>保存文件内容、路径和差异，由人工更新目标配置。</p>
                 </div>
                 <Button
                   disabled={!editable}
@@ -1349,7 +1326,7 @@ export default function App() {
               ) : (
                 <Empty
                   title="还没有配置文件"
-                  detail="选择需要随版本发布的本地文本配置。"
+                  detail="保存本地配置内容与差异，实际文件由人工更新。"
                   action={
                     <Button
                       disabled={!editable}
@@ -1368,8 +1345,8 @@ export default function App() {
           {releaseTab === "components" && (
             <div className="component-section">
               <SectionHeading
-                title="组件与固定提交"
-                description="每个组件分别维护仓库、分支、提交和构建产物。"
+                title="本版本涉及的服务"
+                description="从项目服务清单选择，仅记录本版本的分支、提交和构建产物。"
                 action={
                   <Button
                     disabled={!editable}
@@ -1379,7 +1356,7 @@ export default function App() {
                     }}
                   >
                     <Plus size={15} />
-                    添加组件
+                    选择服务
                   </Button>
                 }
               />
@@ -1396,20 +1373,39 @@ export default function App() {
                           <span className="muted small">{item.kind}</span>
                         </div>
                       </div>
-                      <Button
-                        disabled={!editable}
-                        onClick={() => {
-                          setEditingComponent(item);
-                          setDialog("component");
-                        }}
-                      >
-                        编辑
-                      </Button>
+                      <div className="actions">
+                        <Button
+                          disabled={!editable}
+                          onClick={() =>
+                            updateRelease((value) => ({
+                              ...value,
+                              components: value.components.filter(
+                                (c) => c.id !== item.id,
+                              ),
+                            }))
+                          }
+                        >
+                          移出版本
+                        </Button>
+                        <Button
+                          disabled={!editable}
+                          onClick={() => {
+                            setEditingComponent(item);
+                            setDialog("component");
+                          }}
+                        >
+                          编辑
+                        </Button>
+                      </div>
                     </div>
                     <div className="component-details">
                       <div>
                         <span>Git 仓库</span>
-                        <code>{item.repository}</code>
+                        <code>
+                          {projectServices.find(
+                            (service) => service.id === item.id,
+                          )?.repository || item.repository}
+                        </code>
                       </div>
                       <div>
                         <span>来源分支</span>
@@ -1422,14 +1418,14 @@ export default function App() {
                         <span>固定提交</span>
                         <code>
                           <GitCommitHorizontal size={13} />
-                          {item.commit}
+                          {item.commit || "未登记"}
                         </code>
                       </div>
                       <div>
                         <span>构建产物</span>
                         <code>
                           <Package size={13} />
-                          {item.artifact}
+                          {item.artifact || "未登记"}
                         </code>
                       </div>
                     </div>
@@ -1437,20 +1433,21 @@ export default function App() {
                 ))
               ) : (
                 <Empty
-                  title="还没有代码组件"
-                  detail="添加后端、前端或其他需要发布的组件。"
+                  title="还没有版本服务"
+                  detail="从项目已维护的服务清单中选择。"
                 />
               )}
               <Note>
-                分支用于标识来源，发布时使用版本固定的提交或产物。环境不改变版本内容。
+                分支和提交用于版本追溯。实际发布时选择环境与服务，支持分支参数的
+                Job 可另选本次发布分支。
               </Note>
             </div>
           )}
           {releaseTab === "steps" && (
             <div className="steps-section">
               <SectionHeading
-                title="发布步骤"
-                description="先预览影响范围，再按项目定义的顺序发布。"
+                title="Jenkins 发布流程"
+                description="版本是变更资料，实际发布直接选择环境和服务。"
                 action={
                   <Button onClick={() => openDeploy()}>
                     <Play size={14} />
@@ -1465,28 +1462,14 @@ export default function App() {
                     <h3>{item.name}</h3>
                     <p>{item.detail}</p>
                   </div>
-                  <Badge tone="gray">
-                    {index < 2
-                      ? "前置准备"
-                      : index === 5
-                        ? "结果验证"
-                        : "变更执行"}
-                  </Badge>
+                  <Badge tone="gray">Jenkins</Badge>
                 </div>
               ))}
               <Note>
-                当前展示默认流程。步骤编排、超时与失败处理将在页面确认后的业务开发阶段实现。
+                SQL 由人工执行，配置由人工更新。工具只触发 Jenkins
+                并读取结果，不执行服务器命令。
               </Note>
             </div>
-          )}
-          {releaseTab === "history" && (
-            <>
-              {renderDeploymentTable(
-                projectDeployments.filter(
-                  (item) => item.versionId === release.id,
-                ),
-              )}
-            </>
           )}
         </section>
         {!editable && (
@@ -1506,7 +1489,9 @@ export default function App() {
           <div>
             <div className="eyebrow">ENVIRONMENTS & CONNECTIONS</div>
             <h1>环境连接</h1>
-            <p>维护服务器、数据库与 Jenkins 账号，配置每个环境的发布路径。</p>
+            <p>
+              项目内维护多台服务器、共用部署路径、单一数据库与服务 Job 绑定。
+            </p>
           </div>
           <Button variant="primary" onClick={() => setDialog("environment")}>
             <Plus size={16} />
@@ -1517,7 +1502,7 @@ export default function App() {
           <section className="panel">
             <Empty
               title="为项目添加第一个环境"
-              detail="环境可以分别绑定 Linux 服务器、MySQL 和 Jenkins。"
+              detail="一个环境可维护多台 Linux 服务器和一个 MySQL 连接。"
               action={
                 <Button onClick={() => setDialog("environment")}>
                   新建环境
@@ -1540,7 +1525,8 @@ export default function App() {
                   <div>
                     <strong>{item.name}</strong>
                     <small>
-                      {item.key} · {item.host}
+                      {item.key} ·{" "}
+                      {item.servers.map((server) => server.host).join(" / ")}
                     </small>
                   </div>
                   <ChevronRight size={15} />
@@ -1549,12 +1535,17 @@ export default function App() {
               <div className="connection-tip">
                 <ShieldCheck size={20} />
                 <h3>按环境维护</h3>
-                <p>项目版本可以复用，连接、凭据和路径始终属于目标环境。</p>
+                <p>
+                  服务器与数据库属于当前项目的环境；Jenkins
+                  账号统一引用全局配置。
+                </p>
               </div>
             </aside>
             <EnvironmentEditor
               key={environment.id}
               environment={environment}
+              services={projectServices}
+              profiles={jenkinsProfiles}
               onSave={(value) => {
                 setEnvironments((previous) =>
                   previous.map((item) => (item.id === value.id ? value : item)),
@@ -1576,13 +1567,9 @@ export default function App() {
           <div>
             <div className="eyebrow">DEPLOYMENT HISTORY</div>
             <h1>部署记录</h1>
-            <p>每一次发布独立记录，保留步骤、备份与最终结果。</p>
+            <p>按环境与服务记录 Jenkins Job、发布分支、构建结果和日志资料。</p>
           </div>
-          <Button
-            variant="primary"
-            disabled={!release}
-            onClick={() => openDeploy()}
-          >
+          <Button variant="primary" onClick={() => openDeploy()}>
             <Play size={15} />
             预览发布
           </Button>
@@ -1590,7 +1577,7 @@ export default function App() {
         <section className="panel">
           <div className="list-toolbar">
             <div className="filter-tabs">
-              {["全部", "成功", "失败"].map((label) => (
+              {["全部", "成功", "部分失败", "失败"].map((label) => (
                 <button
                   key={label}
                   className={recordFilter === label ? "active" : ""}
@@ -1682,7 +1669,7 @@ export default function App() {
                   <tr>
                     <th>文件名称</th>
                     <th>来源环境</th>
-                    <th>版本</th>
+                    <th>服务 / 分支</th>
                     <th>大小 / 时间</th>
                     <th>状态</th>
                     <th />
@@ -1747,7 +1734,7 @@ export default function App() {
           ) : (
             <Empty
               title="还没有备份记录"
-              detail="后续会显示手动备份与部署前备份的结果。"
+              detail="后续显示独立发起的备份资料，不随 Jenkins 发布自动创建。"
             />
           )}
         </section>
@@ -1819,7 +1806,7 @@ export default function App() {
             <span className="field-label">包含内容</span>
             <label className="checkbox">
               <input type="checkbox" checked disabled />
-              <span>版本与组件提交</span>
+              <span>项目服务与版本变化</span>
               <LockKeyhole size={12} />
             </label>
             <label className="checkbox">
@@ -1855,7 +1842,6 @@ export default function App() {
             <Button
               variant="primary"
               className="full-width"
-              disabled={!release}
               onClick={() => copy(context)}
             >
               <Copy size={15} />
@@ -1863,7 +1849,6 @@ export default function App() {
             </Button>
             <Button
               className="full-width"
-              disabled={!release}
               onClick={() => {
                 downloadText(
                   `${project.key}-${release?.name}-context.${aiFormat === "JSON" ? "json" : "md"}`,
@@ -1926,6 +1911,24 @@ export default function App() {
 
   const views: Record<Page, () => React.ReactNode> = {
     overview: renderOverview,
+    services: () => (
+      <ServiceManager
+        services={projectServices}
+        onSave={(services) =>
+          setProjects((previous) =>
+            previous.map((p) => (p.id === projectId ? { ...p, services } : p)),
+          )
+        }
+        notify={notify}
+      />
+    ),
+    jenkins: () => (
+      <JenkinsSettings
+        profiles={jenkinsProfiles}
+        onSave={setJenkinsProfiles}
+        notify={notify}
+      />
+    ),
     projects: renderProjects,
     versions: renderVersions,
     environments: renderEnvironments,
@@ -1933,7 +1936,10 @@ export default function App() {
     backups: renderBackups,
     ai: renderAi,
   };
-  const pageTitle = navigation.find((item) => item.id === page)?.title;
+  const pageTitle =
+    page === "jenkins"
+      ? "Jenkins 设置"
+      : navigation.find((item) => item.id === page)?.title;
   const matchingProjects = search
     ? projects.filter((item) =>
         (item.name + item.key).toLowerCase().includes(search.toLowerCase()),
@@ -2007,6 +2013,17 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <div className="nav-caption">全局设置</div>
+        <nav className="sidebar-nav" aria-label="全局设置">
+          <button
+            className={page === "jenkins" ? "active" : ""}
+            onClick={() => navigate("jenkins")}
+          >
+            <Settings2 size={18} />
+            <span>Jenkins 设置</span>
+            <span className="nav-small">共享</span>
+          </button>
+        </nav>
         <div className="sidebar-bottom">
           <button onClick={() => setDialog("help")}>
             <CircleHelp size={17} />
@@ -2035,7 +2052,13 @@ export default function App() {
             </button>
             <span>工作空间</span>
             <ChevronRight size={13} />
-            <span>{page === "projects" ? "全部项目" : project.name}</span>
+            <span>
+              {page === "projects"
+                ? "全部项目"
+                : page === "jenkins"
+                  ? "全局设置"
+                  : project.name}
+            </span>
             {page !== "projects" && (
               <>
                 <ChevronRight size={13} />
@@ -2122,7 +2145,7 @@ export default function App() {
           <span>
             你的项目，每一次发布都有记录。
             <i />
-            前端评审 v0.2
+            前端评审 v0.3
           </span>
         </footer>
       </div>
@@ -2139,7 +2162,8 @@ export default function App() {
       {dialog === "project" && (
         <Modal
           title="新建项目"
-          subtitle="项目用于组织组件、环境和所有发布版本。"
+          wide
+          subtitle="项目用于组织服务、Git、环境和所有版本资料。"
           onClose={closeDialog}
         >
           <form
@@ -2148,8 +2172,23 @@ export default function App() {
               const form = new FormData(event.currentTarget);
               const name = text(form, "name");
               const key = text(form, "key");
+              if (
+                !name ||
+                projectServiceDrafts.some(
+                  (s) =>
+                    !s.name.trim() ||
+                    !s.repository.trim() ||
+                    !s.defaultBranch.trim(),
+                )
+              )
+                return notify("请补全项目名称和服务资料。");
               if (projects.some((item) => item.key === key))
                 return notify("项目标识已存在，请更换标识。");
+              if (
+                new Set(projectServiceDrafts.map((s) => s.name.trim())).size !==
+                projectServiceDrafts.length
+              )
+                return notify("项目服务名称不能重复。");
               const item: Project = {
                 id: unique("project"),
                 name,
@@ -2157,10 +2196,19 @@ export default function App() {
                 description: text(form, "description"),
                 color: "green",
                 updated: "刚刚",
+                services: projectServiceDrafts.map((s) => ({
+                  ...s,
+                  name: s.name.trim(),
+                  repository: s.repository.trim(),
+                  defaultBranch: s.defaultBranch.trim(),
+                })),
               };
               setProjects((previous) => [...previous, item]);
               setProjectId(item.id);
-              setPage("overview");
+              setReleaseId("");
+              setEnvironmentId("");
+              setVersionOpen(false);
+              setPage("services");
               setDialog(null);
               notify("项目已在样稿中创建，下一步可添加环境和版本。");
             }}
@@ -2194,6 +2242,10 @@ export default function App() {
                   placeholder="简要说明项目用途和包含的服务"
                 />
               </Field>
+              <ProjectServiceFields
+                services={projectServiceDrafts}
+                onChange={setProjectServiceDrafts}
+              />
             </div>
             <div className="modal-footer">
               <Button onClick={closeDialog}>取消</Button>
@@ -2230,7 +2282,22 @@ export default function App() {
                 status: "草稿",
                 created: stamp(),
                 author: "本地用户",
-                components: clone(base?.components || []),
+                components: projectServices
+                  .filter((s) => form.getAll("services").includes(s.id))
+                  .map((service) => {
+                    const old = base?.components.find(
+                      (c) => c.id === service.id,
+                    );
+                    return {
+                      id: service.id,
+                      name: service.name,
+                      repository: service.repository,
+                      kind: service.kind,
+                      branch: old?.branch || service.defaultBranch,
+                      commit: old?.commit || "",
+                      artifact: old?.artifact || "",
+                    };
+                  }),
                 scripts: form.has("copySql")
                   ? clone(base?.scripts || []).map((item) => ({
                       ...item,
@@ -2288,9 +2355,38 @@ export default function App() {
                   ))}
                 </select>
               </Field>
+              <div className="version-service-picker">
+                <h3>本版本涉及的服务</h3>
+                {projectServices.map((service) => (
+                  <label className="checkbox" key={service.id}>
+                    <input
+                      name="services"
+                      type="checkbox"
+                      value={service.id}
+                      defaultChecked={release?.components.some(
+                        (c) => c.id === service.id,
+                      )}
+                    />
+                    <span>
+                      {service.name}
+                      <small className="muted"> · {service.kind}</small>
+                    </span>
+                  </label>
+                ))}
+                <Button
+                  onClick={() => {
+                    closeDialog();
+                    navigate("services");
+                  }}
+                >
+                  去项目添加服务
+                </Button>
+              </div>
               <label className="checkbox">
                 <input name="copySql" type="checkbox" />
-                <span>同时复制基准版本 SQL（默认只复制组件和配置）</span>
+                <span>
+                  同时复制基准版本 SQL（配置文件默认沿用，服务按勾选项记录）
+                </span>
               </label>
               <Note>
                 每个版本单独维护脚本变化。复制 SQL
@@ -2510,98 +2606,26 @@ export default function App() {
       )}
 
       {dialog === "component" && release && (
-        <Modal
-          title={editingComponent ? "编辑代码组件" : "添加代码组件"}
-          subtitle="登记本版本的代码来源与固定提交。"
+        <VersionServiceDialog
+          services={projectServices}
+          current={release.components}
+          selected={editingComponent}
           onClose={closeDialog}
-        >
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              const item: Component = {
-                id: editingComponent?.id || unique("component"),
-                name: text(form, "name"),
-                repository: text(form, "repository"),
-                branch: text(form, "branch"),
-                commit: text(form, "commit"),
-                artifact: text(form, "artifact"),
-                kind: text(form, "kind"),
-              };
-              updateRelease((value) => ({
-                ...value,
-                components: editingComponent
-                  ? value.components.map((old) =>
-                      old.id === item.id ? item : old,
-                    )
-                  : [...value.components, item],
-              }));
-              setDialog(null);
-              notify("组件信息已保存到当前版本草稿。");
-            }}
-          >
-            <div className="modal-body">
-              <div className="form-grid">
-                <Field label="组件名称" required>
-                  <input
-                    name="name"
-                    defaultValue={editingComponent?.name}
-                    required
-                  />
-                </Field>
-                <Field label="组件类型">
-                  <select
-                    name="kind"
-                    defaultValue={editingComponent?.kind || "后端服务"}
-                  >
-                    <option>后端服务</option>
-                    <option>前端应用</option>
-                    <option>其他组件</option>
-                  </select>
-                </Field>
-              </div>
-              <Field label="Git 仓库" required>
-                <input
-                  name="repository"
-                  defaultValue={editingComponent?.repository}
-                  placeholder="git.example.com/team/service.git"
-                  required
-                />
-              </Field>
-              <div className="form-grid">
-                <Field label="来源分支" required>
-                  <input
-                    name="branch"
-                    defaultValue={editingComponent?.branch || "main"}
-                    required
-                  />
-                </Field>
-                <Field label="固定 Commit" required>
-                  <input
-                    name="commit"
-                    defaultValue={editingComponent?.commit}
-                    placeholder="例如 c71b3e8"
-                    pattern="[0-9a-fA-F]{7,40}"
-                    required
-                  />
-                </Field>
-              </div>
-              <Field label="构建产物">
-                <input
-                  name="artifact"
-                  defaultValue={editingComponent?.artifact}
-                  placeholder="service.jar"
-                />
-              </Field>
-            </div>
-            <div className="modal-footer">
-              <Button onClick={closeDialog}>取消</Button>
-              <Button type="submit" variant="primary">
-                保存组件
-              </Button>
-            </div>
-          </form>
-        </Modal>
+          onManage={() => {
+            closeDialog();
+            navigate("services");
+          }}
+          onSave={(item) => {
+            updateRelease((value) => ({
+              ...value,
+              components: editingComponent
+                ? value.components.map((c) => (c.id === item.id ? item : c))
+                : [...value.components, item],
+            }));
+            closeDialog();
+            notify("版本服务变化已保存。");
+          }}
+        />
       )}
 
       {dialog === "environment" && (
@@ -2618,14 +2642,29 @@ export default function App() {
               if (projectEnvironments.some((item) => item.key === key))
                 return notify("当前项目中已存在这个环境标识。");
               const item: Environment = {
-                ...clone(initialEnvironments[0]),
+                servers: [
+                  {
+                    id: unique("server"),
+                    name: "应用节点 1",
+                    host: text(form, "host"),
+                    port: "22",
+                    username: "deployer",
+                    authentication: "password",
+                  },
+                ],
+                bindings: [],
+                deployPath: "",
+                backupPath: "",
+                dbHost: "",
+                dbPort: "3306",
+                database: "",
+                dbUser: "",
+                configPath: "",
                 id: unique("environment"),
                 projectId,
                 name: text(form, "name"),
                 key,
                 type: text(form, "type"),
-                host: text(form, "host"),
-                currentVersion: "",
                 checkedAt: "尚未检查",
               };
               setEnvironments((previous) => [...previous, item]);
@@ -2661,8 +2700,8 @@ export default function App() {
                 </Field>
               </div>
               <Note>
-                创建后可分别维护 SSH、MySQL、Jenkins
-                及文件路径。新环境尚未执行连接检查。
+                创建后可添加更多服务器，维护单一 MySQL
+                连接与共用路径，并按服务绑定 Job。账号统一引用全局 Jenkins。
               </Note>
             </div>
             <div className="modal-footer">
@@ -2675,205 +2714,34 @@ export default function App() {
         </Modal>
       )}
 
-      {dialog === "deploy" && release && (
-        <Modal
-          title="发布预览"
-          subtitle={`${project.name} / ${release.name} · ${release.title}`}
-          wide
+      {dialog === "deploy" && (
+        <PublishDialog
+          projectId={projectId}
+          projectName={project.name}
+          environments={projectEnvironments}
+          initialEnvironmentId={environment?.id || ""}
+          services={projectServices}
+          profiles={jenkinsProfiles}
+          onComplete={(record) =>
+            setDeployments((previous) => [record, ...previous])
+          }
           onClose={closeDialog}
-        >
-          <div className="modal-body deploy-body">
-            <Note tone="warm">
-              前端流程演示：不会连接服务器、执行 SQL、触发 Jenkins 或创建备份。
-            </Note>
-            <div className="deployment-target">
-              <Field label="发布到环境">
-                <select
-                  disabled={demoState !== "idle"}
-                  value={environment?.id || ""}
-                  onChange={(event) => setEnvironmentId(event.target.value)}
-                >
-                  {projectEnvironments.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name} · {item.host}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <div>
-                <span>当前完整成功版本</span>
-                <code>{environment?.currentVersion || "尚未发布"}</code>
-              </div>
-              <ArrowRight size={20} />
-              <div>
-                <span>本次版本</span>
-                <code>{release.name}</code>
-              </div>
-              <Badge>{release.status}</Badge>
-            </div>
-            <div className="deployment-scope">
-              <span>
-                <GitBranch size={15} />
-                {release.components.length} 个组件
-              </span>
-              <span>
-                <Database size={15} />
-                {release.scripts.length} 个 SQL
-              </span>
-              <span>
-                <FileText size={15} />
-                {release.configs.length} 个配置
-              </span>
-              <span>
-                <Server size={15} />
-                {environment?.deployPath || "未配置环境"}
-              </span>
-            </div>
-            {release.status === "草稿" && (
-              <div className="draft-warning">
-                <Info size={16} />
-                <span>版本仍是草稿，标记就绪后可演示发布。</span>
-                <Button
-                  onClick={() => {
-                    updateRelease((value) => ({ ...value, status: "就绪" }));
-                    notify("版本已在样稿中标记就绪。");
-                  }}
-                >
-                  标记就绪
-                </Button>
-              </div>
-            )}
-            <div className="execution-steps">
-              {planSteps.map((item, index) => {
-                const done =
-                  demoState === "done" ||
-                  (demoState === "running" && index < demoStep);
-                const running = demoState === "running" && index === demoStep;
-                return (
-                  <div
-                    key={item.name}
-                    className={done ? "done" : running ? "running" : ""}
-                  >
-                    <span className="step-bubble">
-                      {done ? (
-                        <Check size={16} />
-                      ) : running ? (
-                        <LoaderCircle className="spin" size={16} />
-                      ) : (
-                        index + 1
-                      )}
-                    </span>
-                    <div>
-                      <h3>{item.name}</h3>
-                      <p>{item.detail}</p>
-                    </div>
-                    <span className="step-result">
-                      {done ? "演示完成" : running ? "演示中" : "待执行"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            {demoState === "done" && (
-              <div className="demo-result">
-                <CheckCircle2 size={19} />
-                <div>
-                  <strong>发布流程演示完成</strong>
-                  <p>这是一条页面演示记录，没有更新任何真实环境。</p>
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="modal-footer">
-            <span className="muted small">
-              Job：{environment?.job || "未绑定"}
-            </span>
-            <Button onClick={closeDialog}>
-              {demoState === "running" ? "结束演示" : "关闭"}
-            </Button>
-            <Button
-              variant="primary"
-              disabled={
-                demoState !== "idle" ||
-                release.status !== "就绪" ||
-                !environment
-              }
-              onClick={() => {
-                setDemoState("running");
-                setDemoStep(0);
-              }}
-            >
-              <Play size={15} />
-              {demoState === "done"
-                ? "演示已完成"
-                : demoState === "running"
-                  ? "正在演示..."
-                  : "演示一键发布"}
-            </Button>
-          </div>
-        </Modal>
+          onConfigure={() => {
+            closeDialog();
+            navigate("environments");
+          }}
+        />
       )}
 
       {dialog === "deployment-detail" && detailDeployment && (
-        <Modal
-          title={`部署详情 · ${detailDeployment.id}`}
-          subtitle={`${environments.find((item) => item.id === detailDeployment.environmentId)?.name} / ${releases.find((item) => item.id === detailDeployment.versionId)?.name} · 示例执行记录`}
-          wide
+        <DeploymentDetail
+          record={detailDeployment}
+          environmentName={
+            environments.find((e) => e.id === detailDeployment.environmentId)
+              ?.name || ""
+          }
           onClose={closeDialog}
-        >
-          <div className="deployment-detail-header">
-            <Badge>{detailDeployment.status}</Badge>
-            <span>{detailDeployment.started}</span>
-            <span>耗时 {detailDeployment.duration}</span>
-            <span>{detailDeployment.actor}</span>
-          </div>
-          <div className="execution-detail">
-            <aside>
-              {detailDeployment.steps.map((item, index) => (
-                <button
-                  className={index === selectedStep ? "selected" : ""}
-                  key={item.name}
-                  onClick={() => setSelectedStep(index)}
-                >
-                  {item.state === "成功" ? (
-                    <CheckCircle2 className="text-green" size={17} />
-                  ) : item.state === "失败" ? (
-                    <XCircle className="text-red" size={17} />
-                  ) : (
-                    <Clock3 size={17} />
-                  )}
-                  <span>
-                    {item.name}
-                    <small>{item.state}</small>
-                  </span>
-                  <ChevronRight size={13} />
-                </button>
-              ))}
-            </aside>
-            <div className="execution-log">
-              <div className="between">
-                <span>
-                  <SquareTerminal size={15} />
-                  {detailDeployment.steps[selectedStep].name}
-                </span>
-                <Badge>{detailDeployment.steps[selectedStep].state}</Badge>
-              </div>
-              <pre>
-                {detailDeployment.steps[selectedStep].state === "失败"
-                  ? "[13:43:18] 准备上传 application.yml\n[13:43:18] 目标：/opt/apps/order/config\n[13:43:19] ERROR: Permission denied\n[13:43:19] 目标目录不具备写入权限\n[13:43:19] 停止执行，后续发布步骤未运行\n\n建议：核对部署账号和目录权限后，\n根据已完成的步骤重新生成后续计划。"
-                  : detailDeployment.steps[selectedStep].state === "未执行"
-                    ? "此步骤尚未执行。\n前置步骤失败，后续操作已停止。"
-                    : `[示例日志] ${detailDeployment.steps[selectedStep].name}\n开始处理目标环境...\n${detailDeployment.steps[selectedStep].detail}\n步骤完成，结果已记录。\n\n以上为页面展示用日志，没有执行真实操作。`}
-              </pre>
-            </div>
-          </div>
-          <div className="modal-footer">
-            <span className="muted small">
-              保留已完成步骤与备份，不自动重放 SQL
-            </span>
-            <Button onClick={closeDialog}>关闭</Button>
-          </div>
-        </Modal>
+        />
       )}
 
       {dialog === "backup-detail" && detailBackup && (
@@ -3026,15 +2894,20 @@ export default function App() {
               </li>
               <li>
                 <strong>检查版本资源</strong>
-                <p>重点体验 SQL 内容、变化对比、配置和代码组件。</p>
+                <p>重点体验 SQL 内容、变化对比、配置和版本服务。</p>
               </li>
               <li>
                 <strong>维护连接与路径</strong>
-                <p>在环境页切换 SSH、MySQL、Jenkins 和文件路径。</p>
+                <p>
+                  在环境页维护多台服务器、一个数据库和服务任务；全局统一维护
+                  Jenkins 凭据。
+                </p>
               </li>
               <li>
                 <strong>走一遍发布流程</strong>
-                <p>将草稿标记就绪，预览目标并演示步骤。</p>
+                <p>
+                  选择环境与服务，为支持的任务选择分支，演示 Jenkins 构建结果。
+                </p>
               </li>
               <li>
                 <strong>把资料交给外部 AI</strong>

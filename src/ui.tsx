@@ -42,6 +42,7 @@ export function Badge({
         已归档: "gray",
         成功: "green",
         失败: "red",
+        部分失败: "orange",
         新增: "green",
         修改: "blue",
         生产: "orange",

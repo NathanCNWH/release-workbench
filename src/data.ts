@@ -5,6 +5,8 @@ import type {
   Deployment,
   Backup,
   DeployStep,
+  JenkinsProfile,
+  ServiceBuild,
 } from "./types";
 
 export const projects: Project[] = [
@@ -15,6 +17,29 @@ export const projects: Project[] = [
     description: "订单服务、管理控制台及配套数据库的统一发布管理。",
     color: "green",
     updated: "今天 14:32",
+    services: [
+      {
+        id: "api",
+        name: "order-api",
+        kind: "后端服务",
+        repository: "git.example.com/team/order-api.git",
+        defaultBranch: "test",
+      },
+      {
+        id: "web",
+        name: "order-console",
+        kind: "前端应用",
+        repository: "git.example.com/team/order-console.git",
+        defaultBranch: "main",
+      },
+      {
+        id: "worker",
+        name: "order-worker",
+        kind: "后端服务",
+        repository: "git.example.com/team/order-worker.git",
+        defaultBranch: "main",
+      },
+    ],
   },
   {
     id: "portal",
@@ -23,6 +48,15 @@ export const projects: Project[] = [
     description: "客户门户与开放接口，管理前后端和环境配置。",
     color: "blue",
     updated: "昨天 17:20",
+    services: [
+      {
+        id: "portal-web",
+        name: "portal-web",
+        kind: "前端应用",
+        repository: "git.example.com/team/portal.git",
+        defaultBranch: "main",
+      },
+    ],
   },
   {
     id: "data",
@@ -31,6 +65,15 @@ export const projects: Project[] = [
     description: "数据接入与交换服务的版本、脚本及部署记录。",
     color: "orange",
     updated: "10 月 18 日",
+    services: [
+      {
+        id: "exchange-api",
+        name: "exchange-api",
+        kind: "后端服务",
+        repository: "git.example.com/team/exchange.git",
+        defaultBranch: "test",
+      },
+    ],
   },
 ];
 
@@ -176,6 +219,23 @@ export const releases: Release[] = [
   },
 ];
 
+export const jenkinsProfiles: JenkinsProfile[] = [
+  {
+    id: "frontend",
+    name: "前端 Jenkins",
+    url: "https://jenkins-frontend.example.com",
+    username: "frontend-bot",
+    credentialConfigured: true,
+  },
+  {
+    id: "backend",
+    name: "后端 Jenkins",
+    url: "https://jenkins-backend.example.com",
+    username: "backend-bot",
+    credentialConfigured: true,
+  },
+];
+
 export const environments: Environment[] = [
   {
     id: "test",
@@ -183,21 +243,52 @@ export const environments: Environment[] = [
     name: "测试环境",
     key: "test",
     type: "测试",
-    host: "192.0.2.10",
-    port: "22",
-    username: "deployer",
+    servers: [
+      {
+        id: "test-1",
+        name: "应用节点 1",
+        host: "192.0.2.10",
+        port: "22",
+        username: "deployer",
+        authentication: "password",
+      },
+      {
+        id: "test-2",
+        name: "应用节点 2",
+        host: "192.0.2.12",
+        port: "22",
+        username: "deployer",
+        authentication: "password",
+      },
+    ],
+    bindings: [
+      {
+        serviceId: "api",
+        job: "order/order-api-test",
+        parameters: "ENVIRONMENT=test",
+        supportsBranch: true,
+        branchParameter: "BRANCH",
+        branches: ["test", "test_zy", "main", "release/20261020"],
+        defaultBranch: "test",
+      },
+      {
+        serviceId: "web",
+        job: "order/order-console-test",
+        parameters: "ENVIRONMENT=test",
+        supportsBranch: false,
+        branchParameter: "BRANCH",
+        branches: ["test", "test_zy", "main", "release/20261020"],
+        defaultBranch: "test",
+      },
+    ],
     deployPath: "/opt/apps/order",
     backupPath: "/opt/backups/order",
     dbHost: "192.0.2.11",
     dbPort: "3306",
     database: "order_db_test",
     dbUser: "order_user",
-    jenkinsUrl: "https://jenkins.example.com",
-    jenkinsUser: "release-bot",
-    job: "order / deploy-test",
     configPath: "/opt/apps/order/config",
-    currentVersion: "20261019-01",
-    checkedAt: "今天 14:10",
+    checkedAt: "资料已维护（未连接）",
   },
   {
     id: "prod",
@@ -205,21 +296,52 @@ export const environments: Environment[] = [
     name: "生产环境",
     key: "prod",
     type: "生产",
-    host: "192.0.2.20",
-    port: "22",
-    username: "deployer",
+    servers: [
+      {
+        id: "prod-1",
+        name: "应用节点 1",
+        host: "192.0.2.20",
+        port: "22",
+        username: "deployer",
+        authentication: "password",
+      },
+      {
+        id: "prod-2",
+        name: "应用节点 2",
+        host: "192.0.2.22",
+        port: "22",
+        username: "deployer",
+        authentication: "password",
+      },
+    ],
+    bindings: [
+      {
+        serviceId: "api",
+        job: "order/order-api-prod",
+        parameters: "ENVIRONMENT=prod",
+        supportsBranch: true,
+        branchParameter: "BRANCH",
+        branches: ["test", "test_zy", "main", "release/20261020"],
+        defaultBranch: "main",
+      },
+      {
+        serviceId: "web",
+        job: "order/order-console-prod",
+        parameters: "ENVIRONMENT=prod",
+        supportsBranch: false,
+        branchParameter: "BRANCH",
+        branches: ["test", "test_zy", "main", "release/20261020"],
+        defaultBranch: "main",
+      },
+    ],
     deployPath: "/opt/apps/order",
     backupPath: "/opt/backups/order",
     dbHost: "192.0.2.21",
     dbPort: "3306",
     database: "order_db",
-    dbUser: "order_release",
-    jenkinsUrl: "https://jenkins.example.com",
-    jenkinsUser: "release-bot",
-    job: "order / deploy-production",
+    dbUser: "order_user",
     configPath: "/opt/apps/order/config",
-    currentVersion: "20261018-01",
-    checkedAt: "今天 13:45",
+    checkedAt: "资料已维护（未连接）",
   },
   {
     id: "portal-test",
@@ -227,85 +349,119 @@ export const environments: Environment[] = [
     name: "测试环境",
     key: "test",
     type: "测试",
-    host: "192.0.2.30",
-    port: "22",
-    username: "deployer",
+    servers: [
+      {
+        id: "portal-test-1",
+        name: "应用节点 1",
+        host: "192.0.2.30",
+        port: "22",
+        username: "deployer",
+        authentication: "password",
+      },
+    ],
+    bindings: [
+      {
+        serviceId: "portal-web",
+        job: "portal/portal-web-test",
+        parameters: "ENVIRONMENT=test",
+        supportsBranch: true,
+        branchParameter: "BRANCH",
+        branches: ["test", "test_zy", "main", "release/20261020"],
+        defaultBranch: "test",
+      },
+    ],
     deployPath: "/opt/apps/portal",
     backupPath: "/opt/backups/portal",
     dbHost: "192.0.2.31",
     dbPort: "3306",
-    database: "portal_db",
+    database: "portal_db_test",
     dbUser: "portal_user",
-    jenkinsUrl: "https://jenkins.example.com",
-    jenkinsUser: "release-bot",
-    job: "portal / deploy-test",
     configPath: "/opt/apps/portal/config",
-    currentVersion: "20261019-01",
-    checkedAt: "昨天 17:00",
+    checkedAt: "资料已维护（未连接）",
   },
 ];
 
 export const planSteps: DeployStep[] = [
   {
-    name: "环境与连接检查",
-    detail: "核对 Linux 主机、MySQL 与发布路径",
+    name: "选择环境和服务",
+    detail: "读取已绑定的 Jenkins Job 与固定参数",
     state: "成功",
   },
   {
-    name: "数据库与配置备份",
-    detail: "保存业务库及变更前配置文件",
+    name: "确认分支与参数",
+    detail: "只有支持分支参数的 Job 才传入所选分支",
     state: "成功",
   },
   {
-    name: "执行版本 SQL",
-    detail: "按顺序执行并记录脚本校验信息",
+    name: "触发 Jenkins Job",
+    detail: "按服务类型使用全局前端或后端账号，记录队列号",
     state: "成功",
   },
-  { name: "更新配置文件", detail: "解析环境变量并替换目标文件", state: "成功" },
   {
-    name: "触发 Jenkins 发布",
-    detail: "传入版本、固定提交和部署路径",
+    name: "等待构建并记录结果",
+    detail: "获取构建编号、最终结果和控制台日志地址",
     state: "成功",
   },
-  { name: "验证服务状态", detail: "检查服务与 HTTP 健康接口", state: "成功" },
 ];
+
+function sampleBuild(
+  serviceId: string,
+  env: string,
+  failed = false,
+): ServiceBuild {
+  const frontend = serviceId === "web";
+  const name = frontend ? "order-console" : "order-api";
+  const job = `order/${name}-${env}`;
+  const jenkinsUrl = frontend ? jenkinsProfiles[0].url : jenkinsProfiles[1].url;
+  return {
+    serviceId,
+    name,
+    job,
+    jenkinsName: frontend ? "前端 Jenkins" : "后端 Jenkins",
+    jenkinsUrl,
+    branch: frontend ? "" : env === "test" ? "test" : "main",
+    branchParameter: frontend ? "" : "BRANCH",
+    parameters: `ENVIRONMENT=${env}`,
+    status: failed ? "失败" : "成功",
+    buildNumber: failed ? 164 : 163,
+    consoleUrl: `${jenkinsUrl}/job/order/job/${name}-${env}/${failed ? 164 : 163}/console`,
+    log: `[示例构建日志，未连接 Jenkins]\nJob: ${job}\n构建开始，等待 Jenkins 返回结果...\n${failed ? "Finished: FAILURE\n示例原因：构建步骤返回非零退出码。请查看 Job 控制台。" : "Finished: SUCCESS\n结果来自示例数据，实际发布行为由 Job 决定。"}`,
+  };
+}
 
 export const deployments: Deployment[] = [
   {
     id: "DEP-0008",
     projectId: "order",
-    versionId: "r2",
     environmentId: "prod",
-    status: "失败",
+    status: "部分失败",
     started: "2026-10-20 13:42",
     duration: "1 分 28 秒",
     actor: "本地用户",
-    steps: planSteps.map((s, i) => ({
-      ...s,
-      state: i < 3 ? "成功" : i === 3 ? "失败" : "未执行",
-    })),
+    services: [sampleBuild("api", "prod", true), sampleBuild("web", "prod")],
+    steps: [],
   },
   {
     id: "DEP-0007",
     projectId: "order",
-    versionId: "r2",
     environmentId: "test",
     status: "成功",
     started: "2026-10-19 16:30",
     duration: "2 分 14 秒",
     actor: "本地用户",
-    steps: planSteps,
+    services: [sampleBuild("api", "test"), sampleBuild("web", "test")],
+    steps: [],
   },
   {
     id: "DEP-0006",
     projectId: "order",
-    versionId: "r1",
     environmentId: "prod",
     status: "成功",
     started: "2026-10-18 11:08",
     duration: "2 分 42 秒",
     actor: "本地用户",
-    steps: planSteps,
+    services: [sampleBuild("api", "prod")],
+    steps: [],
   },
 ];
 
