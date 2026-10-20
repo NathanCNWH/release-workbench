@@ -13,6 +13,8 @@ coverage/
 /artifacts/
 /tmp/
 /work/
+/output/
+.playwright-cli/
 *.db
 *.db-wal
 *.db-shm
