@@ -1,6 +1,8 @@
 export type Page =
   | "overview"
   | "projects"
+  | "services"
+  | "jenkins"
   | "versions"
   | "environments"
   | "deployments"
@@ -14,6 +16,38 @@ export interface Project {
   description: string;
   color: string;
   updated: string;
+  services: Service[];
+}
+export interface Service {
+  id: string;
+  name: string;
+  repository: string;
+  defaultBranch: string;
+  kind: "后端服务" | "前端应用";
+}
+export interface JenkinsProfile {
+  id: "frontend" | "backend";
+  name: string;
+  url: string;
+  username: string;
+  credentialConfigured: boolean;
+}
+export interface ServerConnection {
+  id: string;
+  name: string;
+  host: string;
+  port: string;
+  username: string;
+  authentication: "password" | "environment" | "key";
+}
+export interface JobBinding {
+  serviceId: string;
+  job: string;
+  parameters: string;
+  supportsBranch: boolean;
+  branchParameter: string;
+  branches: string[];
+  defaultBranch: string;
 }
 export interface Component {
   id: string;
@@ -60,21 +94,30 @@ export interface Environment {
   name: string;
   key: string;
   type: string;
-  host: string;
-  port: string;
-  username: string;
+  servers: ServerConnection[];
+  bindings: JobBinding[];
   deployPath: string;
   backupPath: string;
   dbHost: string;
   dbPort: string;
   database: string;
   dbUser: string;
-  jenkinsUrl: string;
-  jenkinsUser: string;
-  job: string;
   configPath: string;
-  currentVersion: string;
   checkedAt: string;
+}
+export interface ServiceBuild {
+  serviceId: string;
+  name: string;
+  job: string;
+  jenkinsName: string;
+  jenkinsUrl: string;
+  branch: string;
+  branchParameter: string;
+  parameters: string;
+  status: "成功" | "失败";
+  buildNumber: number;
+  consoleUrl: string;
+  log: string;
 }
 export interface DeployStep {
   name: string;
@@ -84,13 +127,13 @@ export interface DeployStep {
 export interface Deployment {
   id: string;
   projectId: string;
-  versionId: string;
   environmentId: string;
-  status: "成功" | "失败";
+  status: "成功" | "失败" | "部分失败";
   started: string;
   duration: string;
   actor: string;
   steps: DeployStep[];
+  services: ServiceBuild[];
 }
 export interface Backup {
   id: string;

@@ -13,6 +13,282 @@
   --sidebar: #173b33;
   --shadow: 0 4px 20px #1c3d3210;
 }
+/* Project services and Jenkins publishing */
+.service-catalog,
+.jenkins-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.catalog-card {
+  padding: 24px;
+  min-width: 0;
+}
+.catalog-card h2 {
+  margin: 18px 0 10px;
+}
+.repository-text,
+.console-url {
+  display: block;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+.catalog-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.project-service-fields {
+  margin-top: 22px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+.project-service-fields > p {
+  margin: 10px 0;
+}
+.service-edit-row,
+.server-edit-card,
+.job-binding-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px;
+  margin: 14px 0;
+  background: #fcfdfc;
+}
+.service-edit-row .form-grid,
+.server-edit-card .form-grid,
+.job-binding-card .form-grid {
+  margin-top: 16px;
+}
+.service-edit-row .between,
+.server-edit-card .between,
+.job-binding-card .between {
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.job-binding-card > p {
+  margin: 10px 0;
+  overflow-wrap: anywhere;
+}
+.jenkins-card {
+  min-width: 0;
+}
+.jenkins-card .editor-form {
+  display: grid;
+  gap: 20px;
+}
+.version-service-picker {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+.record-services {
+  display: grid;
+  gap: 8px;
+}
+.record-services strong {
+  display: block;
+  font-weight: 500;
+  font-size: 13px;
+}
+.record-services small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+.publish-body {
+  display: grid;
+  gap: 20px;
+}
+.publish-target {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  padding: 0 0 20px;
+}
+.publish-target .field {
+  width: 245px;
+  margin: 0;
+}
+.number-chip {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  background: #eaf4ef;
+  color: var(--green);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.publish-services {
+  display: grid;
+  gap: 12px;
+}
+.publish-service {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px;
+  background: #fff;
+}
+.publish-service.selected {
+  border-color: #4b9c82;
+  background: #f7fbf9;
+  box-shadow: 0 0 0 1px #4b9c8214;
+}
+.publish-service.unbound {
+  background: #fafbf9;
+}
+.publish-service-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.publish-service-main .checkbox {
+  margin: 0;
+  align-items: center;
+}
+.publish-service-main strong,
+.publish-service-main small {
+  display: block;
+}
+.publish-service-main strong {
+  font-size: 14px;
+  color: var(--ink);
+}
+.publish-service-main small {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.job-reference {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0 27px;
+  color: #65766c;
+}
+.job-reference code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.publish-service-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  margin: 14px 0 0 27px;
+  padding-top: 14px;
+}
+.publish-service-options .field {
+  margin: 0;
+}
+.fixed-parameters {
+  min-width: 0;
+}
+.fixed-parameters pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 5px 0 0;
+  font:
+    12px/1.6 Consolas,
+    monospace;
+  color: #63756b;
+}
+.publish-demo-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.publish-progress {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 0;
+}
+.publish-progress p {
+  font-size: 12px;
+  margin-top: 5px;
+}
+.build-result-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px;
+  min-width: 0;
+}
+.build-result-card > p {
+  margin: 8px 0;
+}
+.build-log-summary {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f4f7f4;
+  border-radius: 8px;
+  padding: 14px;
+  font:
+    12px/1.8 Consolas,
+    "Microsoft YaHei",
+    monospace;
+}
+.execution-log .console-url {
+  padding: 14px;
+  color: #8dab9d;
+}
+.execution-log > .muted {
+  padding: 0 14px;
+}
+@media (max-width: 1100px) {
+  .jenkins-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 700px) {
+  .service-catalog {
+    grid-template-columns: 1fr;
+  }
+  .publish-target {
+    flex-wrap: wrap;
+  }
+  .publish-target .field {
+    width: calc(100% - 50px);
+  }
+  .publish-target > .muted {
+    padding-left: 50px;
+  }
+  .publish-service-heading {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .publish-service {
+    padding: 14px;
+  }
+  .publish-service-main {
+    flex-wrap: wrap;
+  }
+  .publish-service-options {
+    grid-template-columns: 1fr;
+    margin-left: 0;
+  }
+  .job-reference {
+    margin-left: 0;
+  }
+  .server-edit-card,
+  .job-binding-card {
+    padding: 14px;
+  }
+}
 * {
   box-sizing: border-box;
 }
