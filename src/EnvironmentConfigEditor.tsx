@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { Environment, JenkinsProfile, JobBinding, Service } from "./types";
 import { Badge, Button, Field, Note } from "./ui";
+import { api, post } from "./api";
 
 export default function EnvironmentEditor({
   environment,
@@ -21,12 +22,17 @@ export default function EnvironmentEditor({
   environment: Environment;
   services: Service[];
   profiles: JenkinsProfile[];
-  onSave: (value: Environment) => void;
+  onSave: (
+    value: Environment,
+    secrets: Record<string, string>,
+  ) => Promise<void>;
   notify: (value: string) => void;
 }) {
   const [tab, setTab] = useState("ssh");
   const [draft, setDraft] = useState(environment);
   const [secrets, setSecrets] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [metadata, setMetadata] = useState<Record<string, string>>({});
   type TextKey =
     | "deployPath"
     | "backupPath"
@@ -42,18 +48,29 @@ export default function EnvironmentEditor({
       onChange={(e) => setDraft((old) => ({ ...old, [key]: e.target.value }))}
     />
   );
-  const secret = (id: string, disabled = false) => (
-    <input
-      type="password"
-      disabled={disabled}
-      autoComplete="new-password"
-      value={secrets[id] || ""}
-      onChange={(e) => setSecrets({ ...secrets, [id]: e.target.value })}
-      placeholder={
-        disabled ? "读取 SSH_NAME / SSH_PWD" : "留空不修改（样稿不保存秘密）"
-      }
-    />
-  );
+  const secret = (id: string, disabled = false, multiline = false) =>
+    multiline ? (
+      <textarea
+        rows={5}
+        autoComplete="off"
+        value={secrets[id] || ""}
+        onChange={(e) => setSecrets({ ...secrets, [id]: e.target.value })}
+        placeholder="粘贴完整私钥，保留换行；留空不修改"
+      />
+    ) : (
+      <input
+        type="password"
+        disabled={disabled}
+        autoComplete="new-password"
+        value={secrets[id] || ""}
+        onChange={(e) => setSecrets({ ...secrets, [id]: e.target.value })}
+        placeholder={
+          disabled
+            ? "读取 SSH_NAME / SSH_PWD"
+            : "留空不修改；新值加密保存在本机"
+        }
+      />
+    );
   const binding = (service: Service): JobBinding =>
     draft.bindings.find((b) => b.serviceId === service.id) || {
       serviceId: service.id,
@@ -103,7 +120,6 @@ export default function EnvironmentEditor({
             className={tab === item.id ? "active" : ""}
             onClick={() => {
               setTab(item.id);
-              setSecrets({});
             }}
           >
             <item.icon size={15} />
@@ -112,7 +128,7 @@ export default function EnvironmentEditor({
         ))}
       </div>
       <form
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
           if (
             draft.bindings.some(
@@ -133,8 +149,22 @@ export default function EnvironmentEditor({
             )
           )
             return notify("请补全每台服务器的地址、端口和账号。");
-          onSave(draft);
-          setSecrets({});
+          setBusy(true);
+          try {
+            const validSecrets = Object.fromEntries(
+              Object.entries(secrets).filter(
+                ([id]) =>
+                  id === "database" ||
+                  draft.servers.some((server) => server.id === id),
+              ),
+            );
+            await onSave(draft, validSecrets);
+            setSecrets({});
+          } catch (error: any) {
+            notify(`保存失败：${error.message}`);
+          } finally {
+            setBusy(false);
+          }
         }}
       >
         <div className="editor-form">
@@ -150,6 +180,28 @@ export default function EnvironmentEditor({
                 <div className="server-edit-card" key={server.id}>
                   <div className="between">
                     <h3>服务器 {index + 1}</h3>
+                    <Button
+                      disabled={
+                        busy ||
+                        !environment.servers.some((s) => s.id === server.id)
+                      }
+                      onClick={() => {
+                        setBusy(true);
+                        void post(`/environments/${environment.id}/check`, {
+                          kind: "ssh",
+                          serverId: server.id,
+                        })
+                          .then((result) =>
+                            notify(
+                              `SSH 连接成功，主机指纹：${result.fingerprint}`,
+                            ),
+                          )
+                          .catch((error) => notify(error.message))
+                          .finally(() => setBusy(false));
+                      }}
+                    >
+                      检查已保存连接
+                    </Button>
                     <Button
                       aria-label={`移除服务器 ${index + 1}`}
                       disabled={draft.servers.length === 1}
@@ -204,7 +256,7 @@ export default function EnvironmentEditor({
                               s.id === server.id ? { ...s, authentication } : s,
                             ),
                           });
-                          setSecrets({});
+                          setSecrets((old) => ({ ...old, [server.id]: "" }));
                         }}
                       >
                         <option value="password">账号密码</option>
@@ -224,6 +276,7 @@ export default function EnvironmentEditor({
                       {secret(
                         server.id,
                         server.authentication === "environment",
+                        server.authentication === "key",
                       )}
                     </Field>
                   </div>
@@ -269,6 +322,22 @@ export default function EnvironmentEditor({
           )}
           {tab === "mysql" && (
             <>
+              <Button
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  void post(`/environments/${environment.id}/check`, {
+                    kind: "mysql",
+                  })
+                    .then((result) =>
+                      notify(`MySQL 连接成功，版本 ${result.version}`),
+                    )
+                    .catch((error) => notify(error.message))
+                    .finally(() => setBusy(false));
+                }}
+              >
+                检查已保存数据库连接
+              </Button>
               <div className="form-section-title">
                 <h3>单一 MySQL 连接</h3>
                 <p>当前环境的服务器共用这一个数据库连接。</p>
@@ -311,15 +380,69 @@ export default function EnvironmentEditor({
                   <div className="job-binding-card" key={service.id}>
                     <div className="between">
                       <h3>{service.name}</h3>
+                      <Button
+                        disabled={
+                          busy || !value.job || !profile?.credentialConfigured
+                        }
+                        onClick={() => {
+                          setBusy(true);
+                          void api(
+                            `/jenkins/${profile?.id}/job?path=${encodeURIComponent(value.job)}`,
+                          )
+                            .then((result) => {
+                              const definitions = result.parameters || [];
+                              setMetadata((previous) => ({
+                                ...previous,
+                                [service.id]:
+                                  definitions
+                                    .map(
+                                      (p: any) =>
+                                        `${p.name}（${p.type || "参数"}）${p.choices?.length ? `：${p.choices.join(" / ")}` : ""}`,
+                                    )
+                                    .join("\n") || "任务未公开参数定义",
+                              }));
+                              const branch =
+                                definitions.find(
+                                  (p: any) => p.name === value.branchParameter,
+                                ) ||
+                                definitions.find((p: any) =>
+                                  /branch|分支/i.test(p.name),
+                                );
+                              if (branch?.choices?.length)
+                                updateBinding({
+                                  ...value,
+                                  supportsBranch: true,
+                                  branchParameter: branch.name,
+                                  branches: branch.choices.map(String),
+                                  defaultBranch: branch.choices.includes(
+                                    value.defaultBranch,
+                                  )
+                                    ? value.defaultBranch
+                                    : String(
+                                        branch.defaultValue ||
+                                          branch.choices[0],
+                                      ),
+                                });
+                              notify("已读取 Jenkins 参数，修改后请保存环境。");
+                            })
+                            .catch((error) => notify(error.message))
+                            .finally(() => setBusy(false));
+                        }}
+                      >
+                        读取 Job 参数
+                      </Button>
                       <Badge tone="blue">{profile?.name} · 全局引用</Badge>
                     </div>
+                    {metadata[service.id] && (
+                      <pre className="job-metadata">{metadata[service.id]}</pre>
+                    )}
                     <p className="muted small">
                       {profile?.url} · {profile?.username}
                     </p>
                     <div className="form-grid">
                       <Field
                         label="Job 路径"
-                        hint="例如：order/order-api-test；留空表示未绑定。"
+                        hint="根任务填任务名；实际文件夹内填 folder/job；不包含 Jenkins 视图名。留空表示未绑定。"
                       >
                         <input
                           value={value.job}
@@ -391,7 +514,7 @@ export default function EnvironmentEditor({
                         </Field>
                         <Field
                           label="可选分支（每行一个）"
-                          hint="样稿手动维护示例分支；真实参数读取待后端实现。"
+                          hint="可手动维护；Job 公开分支选项时可通过读取参数更新。插件未公开选项时需手动维护。"
                         >
                           <textarea
                             rows={3}
@@ -449,8 +572,8 @@ export default function EnvironmentEditor({
           )}
         </div>
         <div className="panel-footer">
-          <span className="muted small">样稿仅保留在内存，刷新后重置</span>
-          <Button type="submit" variant="primary">
+          <span className="muted small">资料与加密凭据保存在本机</span>
+          <Button type="submit" variant="primary" disabled={busy}>
             <Save size={14} />
             保存环境配置
           </Button>

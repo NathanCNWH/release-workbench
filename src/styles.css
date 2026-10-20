@@ -1,3 +1,110 @@
+.boot-screen {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  gap: 20px;
+  padding: 32px;
+}
+.welcome-panel {
+  padding: 64px 30px;
+  display: grid;
+  justify-items: center;
+  gap: 20px;
+  text-align: center;
+}
+.welcome-panel > svg {
+  color: #197a62;
+}
+.error-message {
+  background: #fff2ef;
+  color: #9a382c;
+  border: 1px solid #efd3cb;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+.persist-error {
+  margin: 10px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.plan-confirmation {
+  background: #f1f8f4;
+  border: 1px solid #b7d7c8;
+  border-radius: 10px;
+  padding: 20px;
+}
+.plan-confirmation > div {
+  padding: 14px 0;
+  border-bottom: 1px solid #dce9df;
+}
+.plan-confirmation code {
+  display: block;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.plan-confirmation pre,
+.job-metadata {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.plan-confirmation > p {
+  margin: 12px 0 0;
+}
+.mcp-settings {
+  padding: 24px;
+  margin: 22px 0;
+}
+.mcp-settings pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f5f8f5;
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.mcp-settings > p {
+  margin-top: 10px;
+}
+.backup-controls {
+  display: flex;
+  align-items: end;
+  gap: 20px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.backup-controls > .field {
+  flex: 1;
+  margin: 0;
+}
+.checksum {
+  max-width: 330px;
+  overflow-wrap: anywhere;
+}
+.list-toolbar .filter-tabs {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.build-result-card h3 {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  .backup-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .persist-error {
+    margin: 10px 15px;
+  }
+  .mcp-settings {
+    padding: 16px;
+  }
+}
 :root {
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
   color: #273a37;

@@ -2,14 +2,14 @@ import { useState } from "react";
 import { KeyRound, Save, Workflow } from "lucide-react";
 import type { JenkinsProfile } from "./types";
 import { Badge, Button, Field, Note } from "./ui";
+import { api, post } from "./api";
+import { useWorkbench } from "./state";
 
 export default function JenkinsSettings({
   profiles,
-  onSave,
   notify,
 }: {
   profiles: JenkinsProfile[];
-  onSave: (value: JenkinsProfile[]) => void;
   notify: (value: string) => void;
 }) {
   return (
@@ -25,19 +25,12 @@ export default function JenkinsSettings({
       </div>
       <div className="jenkins-grid">
         {profiles.map((profile) => (
-          <JenkinsCard
-            key={profile.id}
-            profile={profile}
-            onSave={(value) =>
-              onSave(profiles.map((p) => (p.id === value.id ? value : p)))
-            }
-            notify={notify}
-          />
+          <JenkinsCard key={profile.id} profile={profile} notify={notify} />
         ))}
       </div>
       <Note>
         这里维护地址和凭据；各项目的 Job 与参数在「环境连接 →
-        服务发布任务」绑定。当前仅为前端演示，不连接 Jenkins。
+        服务发布任务」绑定。连接检查不会触发构建。
       </Note>
     </>
   );
@@ -45,28 +38,38 @@ export default function JenkinsSettings({
 
 function JenkinsCard({
   profile,
-  onSave,
   notify,
 }: {
   profile: JenkinsProfile;
-  onSave: (value: JenkinsProfile) => void;
   notify: (value: string) => void;
 }) {
   const [draft, setDraft] = useState(profile);
   const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const workbench = useWorkbench();
   return (
     <form
       className="panel jenkins-card"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        onSave({
-          ...draft,
-          credentialConfigured: profile.credentialConfigured || !!token,
-        });
-        setToken("");
-        notify(
-          "全局 Jenkins 配置已在样稿中更新，Token 输入已清空；没有保存真实凭据。",
-        );
+        setBusy(true);
+        try {
+          await workbench.update("jenkinsProfiles", (profiles) =>
+            profiles.map((p) => (p.id === profile.id ? draft : p)),
+          );
+          if (token)
+            await api("/credentials", {
+              method: "PUT",
+              body: JSON.stringify({ kind: "jenkins", id: profile.id, token }),
+            });
+          setToken("");
+          await workbench.refresh();
+          notify(token || profile.credentialConfigured ? "Jenkins 配置和加密凭据已保存。" : "Jenkins 地址和账号已保存，请补充 Token 后使用。");
+        } catch (error: any) {
+          notify(`保存失败：${error.message}`);
+        } finally {
+          setBusy(false);
+        }
       }}
     >
       <div className="panel-heading">
@@ -103,7 +106,7 @@ function JenkinsCard({
         </Field>
         <Field
           label="API Token"
-          hint="样稿不持久化 Token；输入只用于表单演示，保存后清空。"
+          hint="Token 加密保存在本机；留空保留原值，接口不会回传。"
         >
           <input
             type="password"
@@ -112,21 +115,31 @@ function JenkinsCard({
             onChange={(e) => setToken(e.target.value)}
             placeholder={
               profile.credentialConfigured
-                ? "已有示例凭据，留空不修改"
-                : "输入 Token（仅演示）"
+                ? "已有凭据，留空不修改"
+                : "输入 Jenkins API Token"
             }
           />
         </Field>
         <div className="inline muted small">
           <KeyRound size={14} />
-          {profile.credentialConfigured
-            ? "示例凭据：已配置（无真实 Token）"
-            : "尚未配置凭据"}
+          {profile.credentialConfigured ? "Token 已配置" : "尚未配置凭据"}
         </div>
       </div>
       <div className="panel-footer">
         <span className="muted small">不随项目切换</span>
-        <Button type="submit" variant="primary">
+        <Button
+          disabled={busy || !profile.credentialConfigured}
+          onClick={() => {
+            setBusy(true);
+            void post(`/jenkins/${profile.id}/check`)
+              .then(() => notify("Jenkins 连接成功。"))
+              .catch((e) => notify(`连接失败：${e.message}`))
+              .finally(() => setBusy(false));
+          }}
+        >
+          检查已保存连接
+        </Button>
+        <Button type="submit" variant="primary" disabled={busy}>
           <Save size={14} />
           保存全局配置
         </Button>

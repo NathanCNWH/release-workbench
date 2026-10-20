@@ -39,6 +39,7 @@ export interface ServerConnection {
   port: string;
   username: string;
   authentication: "password" | "environment" | "key";
+  credentialConfigured?: boolean;
 }
 export interface JobBinding {
   serviceId: string;
@@ -104,6 +105,7 @@ export interface Environment {
   dbUser: string;
   configPath: string;
   checkedAt: string;
+  dbCredentialConfigured?: boolean;
 }
 export interface ServiceBuild {
   serviceId: string;
@@ -114,11 +116,27 @@ export interface ServiceBuild {
   branch: string;
   branchParameter: string;
   parameters: string;
-  status: "成功" | "失败";
+  status: BuildStatus;
   buildNumber: number;
   consoleUrl: string;
   log: string;
+  repository?: string;
+  kind?: string;
+  buildUrl?: string;
+  queueUrl?: string;
+  lastError?: string;
+  jenkinsResult?: string;
 }
+export type BuildStatus =
+  | "待提交"
+  | "提交中"
+  | "排队中"
+  | "构建中"
+  | "成功"
+  | "失败"
+  | "部分失败"
+  | "已中止"
+  | "结果未知";
 export interface DeployStep {
   name: string;
   detail: string;
@@ -128,12 +146,15 @@ export interface Deployment {
   id: string;
   projectId: string;
   environmentId: string;
-  status: "成功" | "失败" | "部分失败";
+  status: BuildStatus;
   started: string;
   duration: string;
   actor: string;
   steps: DeployStep[];
   services: ServiceBuild[];
+  versionId?: string | null;
+  versionName?: string;
+  environmentName?: string;
 }
 export interface Backup {
   id: string;
@@ -146,4 +167,6 @@ export interface Backup {
   created: string;
   location: string;
   status: string;
+  error?: string;
+  sha256?: string;
 }

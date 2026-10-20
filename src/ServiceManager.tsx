@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Code2, GitBranch, Plus, Trash2 } from "lucide-react";
-import type { Component, Service } from "./types";
+import type { Service } from "./types";
 import { Badge, Button, Empty, Field, Modal, Note } from "./ui";
 
 export const newService = (): Service => ({
@@ -75,7 +75,7 @@ export function ProjectServiceFields({
         </Button>
       </div>
       <p className="muted small">
-        在这里维护 Git 和默认分支，版本中直接选择。也可先创建项目，稍后补充。
+        在这里维护 Git 和默认分支，发布时直接选择。也可先创建项目，稍后补充。
       </p>
       {services.map((service, index) => (
         <div className="service-edit-row" key={service.id}>
@@ -118,7 +118,7 @@ export default function ServiceManager({
         <div>
           <div className="eyebrow">PROJECT SERVICES</div>
           <h1>服务管理</h1>
-          <p>项目的服务与 Git 清单，供版本和环境发布任务统一引用。</p>
+          <p>项目的服务与 Git 清单，供发布选择和环境任务绑定引用。</p>
         </div>
         <Button variant="primary" onClick={() => setDraft(newService())}>
           <Plus size={16} />
@@ -193,7 +193,7 @@ export default function ServiceManager({
                   : [...services, value],
               );
               setDraft(null);
-              notify("项目服务已在样稿中保存。");
+              notify("项目服务已提交保存。");
             }}
           >
             <div className="modal-body">
@@ -209,108 +209,5 @@ export default function ServiceManager({
         </Modal>
       )}
     </>
-  );
-}
-
-export function VersionServiceDialog({
-  services,
-  current,
-  selected,
-  onSave,
-  onClose,
-  onManage,
-}: {
-  services: Service[];
-  current: Component[];
-  selected: Component | null;
-  onSave: (value: Component) => void;
-  onClose: () => void;
-  onManage: () => void;
-}) {
-  const available = services.filter(
-    (s) => s.id === selected?.id || !current.some((c) => c.id === s.id),
-  );
-  const [serviceId, setServiceId] = useState(
-    selected?.id || available[0]?.id || "",
-  );
-  const service = services.find((s) => s.id === serviceId);
-  return (
-    <Modal
-      title={selected ? "编辑版本服务" : "选择项目服务"}
-      subtitle="Git 地址引用项目资料，本版本只记录代码变化。"
-      onClose={onClose}
-    >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!service) return;
-          const data = new FormData(e.currentTarget);
-          onSave({
-            id: service.id,
-            name: service.name,
-            repository: service.repository,
-            kind: service.kind,
-            branch: String(data.get("branch")).trim(),
-            commit: String(data.get("commit") || "").trim(),
-            artifact: String(data.get("artifact") || "").trim(),
-          });
-        }}
-      >
-        <div className="modal-body">
-          <Field label="项目服务">
-            <select
-              disabled={!!selected}
-              value={serviceId}
-              onChange={(e) => setServiceId(e.target.value)}
-            >
-              {available.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          {service ? (
-            <div key={service.id}>
-              <Field label="Git 地址（来自项目）">
-                <input value={service.repository} readOnly />
-              </Field>
-              <div className="form-grid">
-                <Field label="本版本分支" required>
-                  <input
-                    name="branch"
-                    required
-                    defaultValue={selected?.branch || service.defaultBranch}
-                  />
-                </Field>
-                <Field label="提交 Commit（可选）">
-                  <input
-                    name="commit"
-                    defaultValue={selected?.commit}
-                    pattern="[0-9a-fA-F]{7,40}"
-                    placeholder="例如 c71b3e8"
-                  />
-                </Field>
-              </div>
-              <Field label="构建产物（可选）">
-                <input name="artifact" defaultValue={selected?.artifact} />
-              </Field>
-            </div>
-          ) : (
-            <Note>项目中的服务已全部选入，或尚未维护服务。</Note>
-          )}
-          <Button onClick={onManage}>
-            <Plus size={14} />
-            去项目添加服务
-          </Button>
-        </div>
-        <div className="modal-footer">
-          <Button onClick={onClose}>取消</Button>
-          <Button variant="primary" type="submit" disabled={!service}>
-            保存版本服务
-          </Button>
-        </div>
-      </form>
-    </Modal>
   );
 }
