@@ -86,6 +86,7 @@ export interface Release {
   status: ReleaseStatus;
   created: string;
   author: string;
+  serviceIds?: string[];
   scripts: SqlScript[];
   configs: ConfigFile[];
   components: Component[];
@@ -168,6 +169,11 @@ export interface Origin {
 }
 export interface VersionMerge {
   versions: Release[];
+  serviceScopes?: {
+    versionId: string;
+    serviceIds: string[];
+    services: Service[];
+  }[];
   scripts: (SqlScript & { origins: Origin[] })[];
   configs: (ConfigFile & { origins: Origin[]; resolvedPath?: string })[];
   conflicts: {

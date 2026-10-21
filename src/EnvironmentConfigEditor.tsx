@@ -101,7 +101,7 @@ export default function EnvironmentEditor({
     }));
   }
   const tabs = [
-    { id: "ssh", name: "服务主机 / SSH", icon: Server },
+    { id: "ssh", name: "服务与主机", icon: Server },
     { id: "mysql", name: "MySQL 数据库", icon: Database },
     { id: "jobs", name: "服务发布任务", icon: Workflow },
     { id: "files", name: "文件与路径", icon: FileText },

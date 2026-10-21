@@ -140,6 +140,16 @@ export function mergeVersions(store, input) {
     throw new AppError("版本或配置已变化，原冲突选择已失效，请重新合并");
   return {
     versions,
+    serviceScopes: versions.map((version) => ({
+      versionId: version.id,
+      serviceIds: version.serviceIds || [],
+      services: store
+        .get("projects")
+        .data.find((p) => p.id === input.projectId)
+        .services.filter((service) =>
+          (version.serviceIds || []).includes(service.id),
+        ),
+    })),
     scripts: scripts.map((script, index) => ({ ...script, order: index + 1 })),
     configs,
     conflicts,

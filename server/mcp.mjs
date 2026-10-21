@@ -31,7 +31,7 @@ async function call(path, input) {
   if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
   return value;
 }
-const server = new McpServer({ name: "release-workbench", version: "0.5.0" });
+const server = new McpServer({ name: "release-workbench", version: "0.6.0" });
 function tool(name, description, inputSchema, handler, readOnly = true) {
   server.registerTool(
     name,
@@ -137,7 +137,7 @@ tool(
 const data = z
   .record(z.unknown())
   .describe(
-    "业务字段。project: name,key,description,color；service: name,kind(后端服务/前端应用),repository,defaultBranch；environment: name,key,type,servers,bindings,deployPath,backupPath,dbHost,dbPort,database,dbUser,configPath；version: name,title,status,author；sql: name,database,order,kind,description,sql,previousSql；config: name,path,format,content,previousContent。主机和服务关联用 bindings[].serverIds；SSH 环境变量模式无需 username。不接收密码；ID 自动生成。新版本不选择服务。",
+    "业务字段。project: name,key,description,color；service: name,kind(后端服务/前端应用),repository,defaultBranch；environment: name,key,type,servers,bindings,deployPath,backupPath,dbHost,dbPort,database,dbUser,configPath；version: name,title,status,author,serviceIds(可选的项目服务ID数组，记录涉及范围，不代表实际发布)；sql: name,database,order,kind,description,sql,previousSql；config: name,path,format,content,previousContent。主机和服务关联用 bindings[].serverIds；SSH 环境变量模式无需 username。不接收密码；ID 自动生成。",
   );
 tool(
   "record_create",

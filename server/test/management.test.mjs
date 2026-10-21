@@ -125,7 +125,11 @@ test("MCP manages all six business entities with revisions and reference protect
           ],
         },
       ],
-      [{ ...scope, entity: "version" }, version, { title: "更新资料" }],
+      [
+        { ...scope, entity: "version" },
+        version,
+        { title: "更新资料", serviceIds: [service.id] },
+      ],
       [sqlScope, sql, { sql: "SELECT 2;" }],
       [configScope, config, { content: "feature: true" }],
     ]) {
@@ -199,6 +203,8 @@ test("MCP manages all six business entities with revisions and reference protect
     });
     assert.equal(merged.scripts[0].sql, "SELECT 2;");
     assert.equal(merged.configs[0].content, "feature: true");
+    assert.deepEqual(merged.serviceScopes[0].serviceIds, [service.id]);
+    assert.equal(merged.serviceScopes[0].services[0].name, "api");
     await remove(sqlScope, sql.id);
     await remove(configScope, config.id);
     await remove({ ...scope, entity: "version" }, version.id);

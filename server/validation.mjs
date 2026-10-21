@@ -48,6 +48,16 @@ const binding = z.object({
   branches: z.array(required).max(2000),
   defaultBranch: text,
 });
+const versionResourceKey = (version) =>
+  JSON.stringify(
+    { ...version, serviceIds: version.serviceIds || [], status: "" },
+    (_key, value) =>
+      value && typeof value === "object" && !Array.isArray(value)
+        ? Object.fromEntries(
+            Object.entries(value).sort(([a], [b]) => a.localeCompare(b)),
+          )
+        : value,
+  );
 const schemas = {
   projects: z
     .array(
@@ -72,6 +82,7 @@ const schemas = {
         status: z.enum(["草稿", "就绪", "已归档"]),
         created: text,
         author: text,
+        serviceIds: z.array(id).max(300).default([]),
         scripts: z.array(script).max(500),
         configs: z.array(config).max(500),
         components: z.array(z.any()).max(300).default([]),
@@ -233,6 +244,16 @@ export function validateCollection(store, name, input) {
       )
         throw new AppError("已绑定任务的服务不能删除");
     const previousProjects = store.get("projects").data;
+    for (const version of store.get("releases").data)
+      if (
+        (version.serviceIds || []).some(
+          (serviceId) =>
+            !projects
+              .find((p) => p.id === version.projectId)
+              ?.services.some((s) => s.id === serviceId),
+        )
+      )
+        throw new AppError("存在版本引用的服务不能删除");
     for (const record of store.list("deployments"))
       if (
         record.services.some(
@@ -291,13 +312,22 @@ export function validateCollection(store, name, input) {
     for (const item of data) {
       const old = store.get(name).data.find((o) => o.id === item.id);
       item.components = []; // Actual service scope belongs exclusively to deployment snapshots.
+      unique(item.serviceIds, (value) => value, "版本涉及服务不能重复");
+      if (
+        item.serviceIds.some(
+          (serviceId) =>
+            !projects
+              .find((p) => p.id === item.projectId)
+              .services.some((s) => s.id === serviceId),
+        )
+      )
+        throw new AppError("版本涉及服务不属于当前项目或不存在");
       unique(item.scripts, (s) => s.id);
       unique(item.configs, (c) => c.id);
       if (
         old &&
         old.status !== "草稿" &&
-        JSON.stringify({ ...old, status: "" }) !==
-          JSON.stringify({ ...item, status: "" })
+        versionResourceKey(old) !== versionResourceKey(item)
       )
         throw new AppError("就绪或归档版本不能修改资源，请复制为新版本");
       if (old && old.status !== "草稿" && item.status === "草稿")

@@ -19,7 +19,7 @@ const fields = {
     "dbUser",
     "configPath",
   ],
-  version: ["name", "title", "status", "author"],
+  version: ["name", "title", "status", "author", "serviceIds"],
   sql: [
     "name",
     "database",
@@ -99,6 +99,7 @@ const defaults = (entity, input, records) => {
       scripts: [],
       configs: [],
       components: [],
+      serviceIds: [],
     },
     sql: {
       database: "",

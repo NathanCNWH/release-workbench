@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Code2, GitBranch, Plus, Trash2 } from "lucide-react";
+import { Code2, GitBranch, GripVertical, Plus, Trash2 } from "lucide-react";
 import type { Service } from "./types";
 import { Badge, Button, Empty, Field, Modal, Note } from "./ui";
 
@@ -116,13 +116,24 @@ export default function ServiceManager({
   notify: (value: string) => void;
 }) {
   const [draft, setDraft] = useState<Service | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  function move(source: string, target: string) {
+    const from = services.findIndex((s) => s.id === source),
+      to = services.findIndex((s) => s.id === target);
+    if (from < 0 || to < 0 || from === to) return;
+    const ordered = [...services];
+    ordered.splice(to, 0, ordered.splice(from, 1)[0]);
+    onSave(ordered);
+    notify("服务顺序已提交保存，其他页面沿用此顺序。");
+  }
   return (
     <>
       <div className="page-heading">
         <div>
           <div className="eyebrow">PROJECT SERVICES</div>
           <h1>服务管理</h1>
-          <p>项目的服务与 Git 清单，供发布选择和环境任务绑定引用。</p>
+          <p>拖动服务卡片上的手柄排序；也可聚焦手柄后用 Alt + ↑ / ↓ 调整。</p>
         </div>
         <Button variant="primary" onClick={() => setDraft(newService())}>
           <Plus size={16} />
@@ -130,9 +141,54 @@ export default function ServiceManager({
         </Button>
       </div>
       <div className="service-catalog">
-        {services.map((service) => (
-          <article className="panel catalog-card" key={service.id}>
+        {services.map((service, index) => (
+          <article
+            className={`panel catalog-card ${dragging === service.id ? "dragging" : ""} ${over === service.id ? "drag-over" : ""}`}
+            key={service.id}
+            onDragOver={(event) => {
+              if (dragging) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setOver(service.id);
+              }
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              if (dragging) move(dragging, service.id);
+              setDragging(null);
+              setOver(null);
+            }}
+          >
             <div className="between">
+              <button
+                type="button"
+                className="service-drag-handle"
+                draggable
+                aria-label={`调整 ${service.name} 顺序`}
+                title="拖动排序；Alt + 上下方向键调整"
+                onDragStart={(event) => {
+                  setDragging(service.id);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", service.id);
+                }}
+                onDragEnd={() => {
+                  setDragging(null);
+                  setOver(null);
+                }}
+                onKeyDown={(event) => {
+                  if (
+                    event.altKey &&
+                    ["ArrowUp", "ArrowDown"].includes(event.key)
+                  ) {
+                    event.preventDefault();
+                    const target =
+                      services[index + (event.key === "ArrowUp" ? -1 : 1)];
+                    if (target) move(service.id, target.id);
+                  }
+                }}
+              >
+                <GripVertical size={19} />
+              </button>
               <span className="component-icon">
                 <Code2 size={22} />
               </span>

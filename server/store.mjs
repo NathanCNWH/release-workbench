@@ -72,6 +72,16 @@ export class Store {
         }
     if (migrated)
       this.save("environments", environments.data, environments.revision);
+    const releases = this.get("releases");
+    if (releases.data.some((release) => release.serviceIds === undefined))
+      this.save(
+        "releases",
+        releases.data.map((release) => ({
+          ...release,
+          serviceIds: release.serviceIds ?? [],
+        })),
+        releases.revision,
+      );
   }
   close() {
     this.db.close();
