@@ -35,7 +35,7 @@ export async function checkMysql(store, environment) {
 export async function checkSsh(store, environment, serverId) {
   const server = environment.servers.find((s) => s.id === serverId);
   if (!server) throw new AppError("服务器不存在", 404);
-  const { Client } = await import("ssh2");
+  const { Client } = (await import("ssh2")).default;
   const secretId = `ssh:${environment.id}:${server.id}`;
   const password =
     server.authentication === "environment"

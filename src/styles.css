@@ -4375,3 +4375,87 @@ strong {
     transition: none !important;
   }
 }
+.service-host-card,
+.version-picker,
+.version-resources {
+  border: 1px solid var(--border, #e3e8e6);
+  border-radius: 12px;
+  padding: 18px;
+  margin: 14px 0;
+  min-width: 0;
+}
+.host-choices,
+.version-options {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+.version-options {
+  max-height: 210px;
+  overflow: auto;
+}
+.version-order {
+  padding-left: 22px;
+}
+.version-order li {
+  padding: 5px 0;
+}
+.version-order li > div {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: 16px;
+}
+.version-order .button {
+  padding: 3px 10px;
+  min-height: 28px;
+}
+.merge-conflicts {
+  background: #fff7ed;
+  padding: 14px;
+  border-radius: 10px;
+  margin: 12px 0;
+}
+.merge-conflict {
+  display: grid;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid #f0d8bb;
+}
+.merge-conflict:last-child {
+  border-bottom: 0;
+}
+.version-resources pre {
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f4f7f6;
+  padding: 12px;
+  border-radius: 8px;
+}
+.merged-file {
+  margin-top: 12px;
+  border-top: 1px solid #e3e8e6;
+  padding-top: 12px;
+}
+.merged-file summary,
+.merge-conflict summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.merged-file small {
+  display: block;
+  color: #73817b;
+  margin-top: 5px;
+}
+.resource-downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+.service-host-card .between,
+.version-picker .between {
+  flex-wrap: wrap;
+  gap: 10px;
+}

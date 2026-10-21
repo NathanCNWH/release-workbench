@@ -47,7 +47,11 @@ export function ServiceFields({
           placeholder="git@example.com:team/service.git"
         />
       </Field>
-      <Field label="默认分支" required>
+      <Field
+        label="默认分支"
+        required
+        hint="仅预填新环境任务的分支；实际发布以任务设置或当次选择为准，不修改 Git。"
+      >
         <input
           value={value.defaultBranch}
           required

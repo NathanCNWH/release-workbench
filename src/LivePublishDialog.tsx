@@ -7,9 +7,11 @@ import type {
   Service,
   Release,
   ServiceBuild,
+  VersionMerge,
 } from "./types";
 import { Badge, Button, Empty, Field, Modal, Note } from "./ui";
 import { api, post } from "./api";
+import { VersionPicker, VersionResources } from "./VersionMerge";
 const done = (status: string) =>
   ["成功", "失败", "部分失败", "结果未知", "已中止"].includes(status);
 
@@ -21,6 +23,7 @@ export default function LivePublishDialog({
   services,
   profiles,
   version,
+  versions,
   onComplete,
   onClose,
   onConfigure,
@@ -32,6 +35,7 @@ export default function LivePublishDialog({
   services: Service[];
   profiles: JenkinsProfile[];
   version?: Release;
+  versions: Release[];
   onComplete: (record: Deployment) => void;
   onClose: () => void;
   onConfigure: () => void;
@@ -45,6 +49,48 @@ export default function LivePublishDialog({
     [record, setRecord] = useState<Deployment | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [versionIds, setVersionIds] = useState<string[]>(
+    version ? [version.id] : [],
+  );
+  const [resolutions, setResolutions] = useState<Record<string, string>>({});
+  const [merge, setMerge] = useState<VersionMerge | null>(null),
+    [mergeError, setMergeError] = useState(""),
+    [merging, setMerging] = useState(false);
+  const versionKey = JSON.stringify(
+    versions.filter((v) => versionIds.includes(v.id)),
+  );
+  useEffect(() => {
+    let current = true;
+    setMerging(true);
+    setMergeError("");
+    void post<VersionMerge>("/versions/merge", {
+      projectId,
+      environmentId: environmentId || undefined,
+      versionIds,
+      resolutions,
+    })
+      .then((result) => {
+        if (current) setMerge(result);
+      })
+      .catch((e) => {
+        if (current) {
+          setMerge(null);
+          setMergeError(e.message);
+        }
+      })
+      .finally(() => {
+        if (current) setMerging(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [
+    projectId,
+    environmentId,
+    JSON.stringify(versionIds),
+    JSON.stringify(resolutions),
+    versionKey,
+  ]);
   const environment = environments.find((e) => e.id === environmentId);
   useEffect(() => {
     if (!record || done(record.status)) return;
@@ -87,7 +133,8 @@ export default function LivePublishDialog({
         await post("/deployments/preview", {
           projectId,
           environmentId,
-          versionId: version?.id,
+          versionIds,
+          resolutions,
           selections: selected.map((serviceId) => ({
             serviceId,
             branch: environment?.bindings.find((b) => b.serviceId === serviceId)
@@ -124,7 +171,7 @@ export default function LivePublishDialog({
   return (
     <Modal
       title={record ? "发布进度" : "发布服务"}
-      subtitle={`${projectName} · ${version ? `关联版本 ${version.name}` : "独立发布（不关联版本）"}`}
+      subtitle={`${projectName} · ${versionIds.length ? `合并 ${versionIds.length} 个版本的发布资料` : "独立发布（不关联版本）"}`}
       wide
       onClose={onClose}
     >
@@ -140,6 +187,16 @@ export default function LivePublishDialog({
         )}
         {!record ? (
           <>
+            <VersionPicker
+              versions={versions}
+              selected={versionIds}
+              disabled={busy}
+              onChange={(ids) => {
+                setVersionIds(ids);
+                setResolutions({});
+                reset();
+              }}
+            />
             <div className="publish-target">
               <span className="number-chip">01</span>
               <Field label="选择环境">
@@ -150,6 +207,7 @@ export default function LivePublishDialog({
                     setEnvironmentId(e.target.value);
                     setSelected([]);
                     setBranches({});
+                    setResolutions({});
                     reset();
                   }}
                 >
@@ -165,7 +223,7 @@ export default function LivePublishDialog({
               </Field>
               <span className="muted small">
                 {environment
-                  ? `${environment.servers.length} 台服务器 · ${environment.deployPath || "未登记路径"}`
+                  ? `${environment.deployPath || "未登记共用路径"} · 主机按服务关联`
                   : "请先创建项目环境"}
               </span>
             </div>
@@ -229,6 +287,13 @@ export default function LivePublishDialog({
                       <Workflow size={14} />
                       <code>{binding?.job || "尚未配置任务"}</code>
                     </div>
+                    <p className="muted small">
+                      关联主机：
+                      {environment?.servers
+                        .filter((host) => binding?.serverIds?.includes(host.id))
+                        .map((host) => `${host.name} (${host.host})`)
+                        .join("、") || "未登记（Jenkins 仍使用 Job 自身配置）"}
+                    </p>
                     {binding?.job && (
                       <div className="publish-service-options">
                         {binding.supportsBranch ? (
@@ -276,6 +341,23 @@ export default function LivePublishDialog({
                 detail="请先添加服务，再为目标环境绑定 Jenkins Job。"
               />
             )}
+            {mergeError && <div className="error-message">{mergeError}</div>}
+            {merging && <p className="muted small">正在合并版本资料…</p>}
+            {merge && (
+              <VersionResources
+                merge={merge}
+                disabled={busy || merging}
+                onResolve={(key, id) => {
+                  setResolutions((old) => {
+                    const next = { ...old };
+                    if (id) next[key] = id;
+                    else delete next[key];
+                    return next;
+                  });
+                  reset();
+                }}
+              />
+            )}
             {plan && (
               <section className="plan-confirmation">
                 <h3>发布预览已生成</h3>
@@ -310,6 +392,9 @@ export default function LivePublishDialog({
             {record.services.map((build) => (
               <BuildCard key={build.serviceId} build={build} />
             ))}
+            {record.versionSnapshot && (
+              <VersionResources merge={record.versionSnapshot} />
+            )}
           </>
         )}
       </div>
@@ -336,7 +421,14 @@ export default function LivePublishDialog({
           ) : (
             <Button
               variant="primary"
-              disabled={busy || !environment || !selected.length}
+              disabled={
+                busy ||
+                merging ||
+                !!mergeError ||
+                !!merge?.unresolved ||
+                !environment ||
+                !selected.length
+              }
               onClick={() => void preview()}
             >
               {busy ? "生成中…" : "生成发布预览"}
@@ -360,6 +452,11 @@ function BuildCard({ build }: { build: ServiceBuild }) {
       <p>
         <GitBranch size={14} /> {build.branch || "使用 Job 自身配置"}
       </p>
+      {!!build.servers?.length && (
+        <p className="muted small">
+          主机快照：{build.servers.map((host) => host.host).join("、")}
+        </p>
+      )}
       <pre className="build-log-summary">{build.log || "等待任务处理…"}</pre>
       {build.consoleUrl && (
         <a
@@ -411,6 +508,9 @@ export function DeploymentDetail({
         <span>{current.actor}</span>
       </div>
       {error && <div className="error-message">{error}</div>}
+      {current.versionSnapshot && (
+        <VersionResources merge={current.versionSnapshot} />
+      )}
       <div className="execution-detail">
         <aside>
           {current.services.map((s) => (

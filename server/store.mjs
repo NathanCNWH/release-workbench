@@ -61,6 +61,17 @@ export class Store {
           name,
           JSON.stringify(name === "jenkinsProfiles" ? blankProfiles : []),
         );
+    // Preserve legacy host data without guessing which service owns it.
+    const environments = this.get("environments");
+    let migrated = false;
+    for (const environment of environments.data)
+      for (const binding of environment.bindings)
+        if (!Array.isArray(binding.serverIds)) {
+          binding.serverIds = [];
+          migrated = true;
+        }
+    if (migrated)
+      this.save("environments", environments.data, environments.revision);
   }
   close() {
     this.db.close();

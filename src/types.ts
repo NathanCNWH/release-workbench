@@ -43,6 +43,7 @@ export interface ServerConnection {
 }
 export interface JobBinding {
   serviceId: string;
+  serverIds?: string[];
   job: string;
   parameters: string;
   supportsBranch: boolean;
@@ -121,6 +122,7 @@ export interface ServiceBuild {
   consoleUrl: string;
   log: string;
   repository?: string;
+  servers?: ServerConnection[];
   kind?: string;
   buildUrl?: string;
   queueUrl?: string;
@@ -153,8 +155,34 @@ export interface Deployment {
   steps: DeployStep[];
   services: ServiceBuild[];
   versionId?: string | null;
+  versionIds?: string[];
+  versionSnapshot?: VersionMerge;
+  deployPath?: string;
   versionName?: string;
   environmentName?: string;
+}
+export interface Origin {
+  versionId: string;
+  versionName: string;
+  resourceId: string;
+}
+export interface VersionMerge {
+  versions: Release[];
+  scripts: (SqlScript & { origins: Origin[] })[];
+  configs: (ConfigFile & { origins: Origin[]; resolvedPath?: string })[];
+  conflicts: {
+    key: string;
+    kind: "sql" | "config";
+    label: string;
+    selectedId: string;
+    choices: {
+      id: string;
+      origins: Origin[];
+      item: Partial<SqlScript & ConfigFile>;
+    }[];
+  }[];
+  resolutions: Record<string, string>;
+  unresolved: number;
 }
 export interface Backup {
   id: string;

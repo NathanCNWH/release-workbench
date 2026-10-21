@@ -16,6 +16,8 @@ import { Deployments } from "./deployments.mjs";
 import { Backups } from "./backups.mjs";
 import { checkMysql, checkSsh } from "./connections.mjs";
 import { acquireLock } from "./lock.mjs";
+import { mergeVersions } from "./versions.mjs";
+import { recordOperation } from "./records.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sameToken = (a, b) => {
@@ -108,13 +110,24 @@ export async function createApp({
       if (req.method === "GET" && path === "/api/health")
         return json(res, 200, {
           app: "release-workbench",
-          version: "0.4.0",
+          version: "0.5.0",
           status: closing ? "stopping" : "ready",
           instanceId,
           pid: process.pid,
         });
       if (req.method === "GET" && path === "/api/state")
         return json(res, 200, store.publicState());
+      const records = path.match(
+        /^\/api\/records\/(list|get|create|update|delete)$/,
+      );
+      if (req.method === "POST" && records)
+        return json(
+          res,
+          200,
+          recordOperation(store, records[1], await body(req)),
+        );
+      if (req.method === "POST" && path === "/api/versions/merge")
+        return json(res, 200, mergeVersions(store, await body(req)));
       if (req.method === "GET" && path === "/api/info")
         return json(res, 200, {
           dataDirectory: store.directory,
@@ -274,7 +287,11 @@ export async function createApp({
           deployments: state.deployments.filter(
             (d) => d.projectId === project.id,
           ),
-          allowedActions: ["读取资料", "预览并触发已绑定 Jenkins Job"],
+          allowedActions: [
+            "资料查询、新增、编辑、删除或归档",
+            "多版本合并发布资料",
+            "预览并触发已绑定 Jenkins Job",
+          ],
           manualActions: ["SQL 人工执行", "配置人工更新"],
         });
       }

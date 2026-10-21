@@ -185,7 +185,9 @@ export default function App() {
   );
   function publishedServices(id: string) {
     const selected = new Map<string, any>();
-    for (const record of deployments.filter((d) => d.versionId === id))
+    for (const record of deployments.filter((d) =>
+      (d.versionIds || [d.versionId]).includes(id),
+    ))
       for (const service of record.services)
         if (!selected.has(service.serviceId))
           selected.set(service.serviceId, {
@@ -297,7 +299,7 @@ export default function App() {
           }
         : null,
       allowedActions: [
-        "读取项目和版本资料",
+        "项目、服务、环境、版本及 SQL/配置资料的增删改查",
         "选择环境、服务及支持的分支，触发已绑定 Jenkins Job",
       ],
       manualActions: ["SQL 由人工执行", "配置文件由人工更新"],
@@ -309,6 +311,7 @@ export default function App() {
               ? {
                   name: environment.name,
                   servers: environment.servers.map((s) => ({
+                    id: s.id,
                     name: s.name,
                     host: s.host,
                   })),
@@ -322,7 +325,7 @@ export default function App() {
         : {}),
     };
     if (aiFormat === "JSON") return JSON.stringify(data, null, 2);
-    return `# ${project.name} · ${release?.name || "项目资料"}\n\n> 本机项目资料；不包含已保存的连接凭据。\n\n## 可调用范围\n\n选择环境和服务，仅触发 Jenkins Job；支持分支参数的任务可指定分支。不执行 SQL，不更新配置，不进行 SSH 部署。\n\n## 项目服务\n\n${project.services.map((s) => `- ${s.name}（${s.kind}）：${s.repository}，默认分支 ${s.defaultBranch}`).join("\n")}\n\n## 版本资料\n\n${release?.title || "暂无版本"}\n${release?.components.map((c) => `- ${c.name}：${c.branch} / ${c.commit || "未登记提交"}`).join("\n") || ""}\n${includeEnvironment && environment ? `\n## 目标环境与任务\n\n${environment.name} · ${environment.servers.map((s) => s.host).join("、")}\n共用路径：${environment.deployPath}\n数据库：${environment.database}\n${environment.bindings.map((b) => `- ${project.services.find((s) => s.id === b.serviceId)?.name || b.serviceId}：${b.job || "未绑定"}；${b.supportsBranch ? `分支参数 ${b.branchParameter}，可选 ${b.branches.join(" / ")}` : "使用 Job 自身配置"}；固定参数 ${b.parameters || "无"}`).join("\n")}\n` : ""}${includeSql ? `\n## SQL（人工执行）\n${release?.scripts.map((s) => `\n### ${s.name}\n\n${s.sql}\n`).join("\n") || "暂无脚本"}` : ""}${includeConfigs ? `\n## 配置文件（人工更新）\n${release?.configs.map((c) => `\n### ${c.name} · ${c.path}\n\n${c.content}\n`).join("\n") || "暂无配置文件"}` : ""}`;
+    return `# ${project.name} · ${release?.name || "项目资料"}\n\n> 本机项目资料；不包含已保存的连接凭据。\n\n## 可调用范围\n\n选择环境和服务，仅触发 Jenkins Job；支持分支参数的任务可指定分支。不执行 SQL，不更新配置，不进行 SSH 部署。\n\n## 项目服务\n\n${project.services.map((s) => `- ${s.name}（${s.kind}）：${s.repository}，默认分支 ${s.defaultBranch}`).join("\n")}\n\n## 版本资料\n\n${release?.title || "暂无版本"}\n${release?.components.map((c) => `- ${c.name}：${c.branch} / ${c.commit || "未登记提交"}`).join("\n") || ""}\n${includeEnvironment && environment ? `\n## 目标环境与任务\n\n${environment.name} · ${environment.servers.map((s) => s.host).join("、")}\n共用路径：${environment.deployPath}\n数据库：${environment.database}\n${environment.bindings.map((b) => `- ${project.services.find((s) => s.id === b.serviceId)?.name || b.serviceId}：${b.job || "未绑定"}；主机 ${(b.serverIds || []).map((id) => environment.servers.find((host) => host.id === id)?.host || id).join("、") || "未关联"}；${b.supportsBranch ? `分支参数 ${b.branchParameter}，可选 ${b.branches.join(" / ")}` : "使用 Job 自身配置"}；固定参数 ${b.parameters || "无"}`).join("\n")}\n` : ""}${includeSql ? `\n## SQL（人工执行）\n${release?.scripts.map((s) => `\n### ${s.name}\n\n${s.sql}\n`).join("\n") || "暂无脚本"}` : ""}${includeConfigs ? `\n## 配置文件（人工更新）\n${release?.configs.map((c) => `\n### ${c.name} · ${c.path}\n\n${c.content}\n`).join("\n") || "暂无配置文件"}` : ""}`;
   }, [
     release,
     project,
@@ -368,7 +371,7 @@ export default function App() {
                 </td>
                 <td>
                   <div className="resource-counts">
-                    <span title="版本服务">
+                    <span title="已发布服务">
                       <GitBranch size={13} />
                       {publishedServices(item.id).length}
                     </span>
@@ -604,7 +607,7 @@ export default function App() {
                       </span>
                       <span className="muted mono">{item.key}</span>
                     </div>
-                    <p className="env-version-label">环境服务器</p>
+                    <p className="env-version-label">服务关联主机资料</p>
                     <div className="env-version">
                       {item.servers.length} 台 Linux 节点
                     </div>
@@ -714,7 +717,7 @@ export default function App() {
                   }
                 >
                   <GitBranch size={16} />
-                  <span>版本服务</span>
+                  <span>已发布服务</span>
                   <b>{release?.components.length || 0}</b>
                   <ChevronRight size={13} />
                 </button>
@@ -750,8 +753,8 @@ export default function App() {
               <ShieldCheck size={20} />
               <h3>一份版本，完整追溯</h3>
               <p>
-                版本保存 SQL、配置与服务变化；发布只触发所选服务的 Jenkins
-                Job，SQL 和配置由人工处理。
+                版本保存 SQL 与配置变化；发布只触发所选服务的 Jenkins Job，SQL
+                和配置由人工处理。
               </p>
               <button className="text-button" onClick={() => setDialog("help")}>
                 了解页面流程
@@ -1020,7 +1023,7 @@ export default function App() {
                       <GitBranch size={20} />
                     </span>
                     <div>
-                      <strong>{release.components.length} 个版本服务</strong>
+                      <strong>{release.components.length} 个已发布服务</strong>
                       <small>发布时选择的服务和分支</small>
                     </div>
                     <ChevronRight size={16} />
@@ -1397,7 +1400,9 @@ export default function App() {
                 }
               />
               {renderDeploymentTable(
-                projectDeployments.filter((d) => d.versionId === release.id),
+                projectDeployments.filter((d) =>
+                  (d.versionIds || [d.versionId]).includes(release.id),
+                ),
               )}
             </div>
           )}
@@ -1494,7 +1499,7 @@ export default function App() {
                 <ShieldCheck size={20} />
                 <h3>按环境维护</h3>
                 <p>
-                  服务器与数据库属于当前项目的环境；Jenkins
+                  主机按环境内的服务分别关联，数据库由环境共用；Jenkins
                   账号统一引用全局配置。
                 </p>
               </div>
@@ -2011,7 +2016,7 @@ export default function App() {
           <span>
             你的项目，每一次发布都有记录。
             <i />
-            本地应用 v0.4
+            本地应用 v0.5
           </span>
         </footer>
       </div>
@@ -2461,16 +2466,7 @@ export default function App() {
               if (projectEnvironments.some((item) => item.key === key))
                 return notify("当前项目中已存在这个环境标识。");
               const item: Environment = {
-                servers: [
-                  {
-                    id: unique("server"),
-                    name: "应用节点 1",
-                    host: text(form, "host"),
-                    port: "22",
-                    username: "deployer",
-                    authentication: "password",
-                  },
-                ],
+                servers: [],
                 bindings: [],
                 deployPath: "",
                 backupPath: "",
@@ -2514,12 +2510,9 @@ export default function App() {
                     <option>自定义</option>
                   </select>
                 </Field>
-                <Field label="Linux 主机地址" required>
-                  <input name="host" placeholder="例如：192.0.2.100" required />
-                </Field>
               </div>
               <Note>
-                创建后可添加更多服务器，维护单一 MySQL
+                创建后按服务添加或复用多台主机，维护环境单一 MySQL
                 连接与共用路径，并按服务绑定 Job。账号统一引用全局 Jenkins。
               </Note>
             </div>
@@ -2542,6 +2535,7 @@ export default function App() {
           services={projectServices}
           profiles={jenkinsProfiles}
           version={deployVersion}
+          versions={projectReleases}
           onComplete={() => void workbench.refresh()}
           onClose={closeDialog}
           onConfigure={() => {
@@ -2635,7 +2629,7 @@ export default function App() {
               </li>
               <li>
                 <strong>检查版本资源</strong>
-                <p>重点体验 SQL 内容、变化对比、配置和版本服务。</p>
+                <p>管理 SQL、配置变化、服务主机与多版本发布快照。</p>
               </li>
               <li>
                 <strong>维护连接与路径</strong>

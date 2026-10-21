@@ -2,6 +2,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { AppError } from "./store.mjs";
 import { Jenkins, jobUrl } from "./jenkins.mjs";
 import { parameters } from "./validation.mjs";
+import { mergeVersions } from "./versions.mjs";
 
 export const terminal = (status) =>
   ["成功", "失败", "部分失败", "已中止", "结果未知"].includes(status);
@@ -24,7 +25,7 @@ export class Deployments {
     this.timer = null;
   }
   inputs(input) {
-    const { projectId, environmentId, versionId, selections } = input;
+    const { projectId, environmentId, selections } = input;
     const project = this.store
       .get("projects")
       .data.find((p) => p.id === projectId);
@@ -32,13 +33,10 @@ export class Deployments {
       .get("environments")
       .data.find((e) => e.id === environmentId && e.projectId === projectId);
     if (!project || !environment) throw new AppError("项目或环境不存在");
-    if (
-      versionId &&
-      !this.store
-        .get("releases")
-        .data.some((r) => r.id === versionId && r.projectId === projectId)
-    )
-      throw new AppError("关联版本不属于当前项目");
+    const versionSnapshot = mergeVersions(this.store, input);
+    if (versionSnapshot.unresolved)
+      throw new AppError("版本资料存在未处理冲突，请先完成合并选择");
+    const versionIds = versionSnapshot.versions.map((v) => v.id);
     if (
       !Array.isArray(selections) ||
       !selections.length ||
@@ -89,6 +87,16 @@ export class Deployments {
         jenkinsUrl: profile.url,
         jenkinsUser: profile.username,
         job: binding.job,
+        servers: environment.servers
+          .filter((server) => (binding.serverIds || []).includes(server.id))
+          .map(({ id, name, host, port, username, authentication }) => ({
+            id,
+            name,
+            host,
+            port,
+            username: authentication === "environment" ? "" : username,
+            authentication,
+          })),
         branch,
         branchParameter: binding.supportsBranch ? binding.branchParameter : "",
         parameters: Object.entries(params)
@@ -105,12 +113,15 @@ export class Deployments {
     return {
       projectId,
       environmentId,
-      versionId: versionId || null,
+      versionId: versionIds.length === 1 ? versionIds[0] : null,
+      versionIds,
+      versionSnapshot,
+      deployPath: environment.deployPath,
       projectName: project.name,
       environmentName: environment.name,
-      versionName:
-        this.store.get("releases").data.find((r) => r.id === versionId)?.name ||
-        "",
+      versionName: versionSnapshot.versions
+        .map((version) => version.name)
+        .join(" + "),
       services,
     };
   }
@@ -123,6 +134,7 @@ export class Deployments {
       ...inputs,
       id: randomUUID(),
       selections: input.selections,
+      resolutions: input.resolutions || {},
       createdAt: Date.now(),
       expiresAt: Date.now() + 10 * 60 * 1000,
       fingerprint: fingerprint(inputs),
@@ -134,7 +146,7 @@ export class Deployments {
     const { record, created } = this.store.claimPlan(planId, (plan) => {
       if (fingerprint(this.inputs(plan)) !== plan.fingerprint)
         throw new AppError(
-          "服务、环境或 Jenkins 配置已变化，请重新预览。",
+          "版本资料、服务、环境或 Jenkins 配置已变化，请重新预览。",
           409,
         );
       const locked = this.store
@@ -158,6 +170,9 @@ export class Deployments {
         projectId: plan.projectId,
         environmentId: plan.environmentId,
         versionId: plan.versionId,
+        versionIds: plan.versionIds,
+        versionSnapshot: plan.versionSnapshot,
+        deployPath: plan.deployPath,
         projectName: plan.projectName,
         environmentName: plan.environmentName,
         versionName: plan.versionName,

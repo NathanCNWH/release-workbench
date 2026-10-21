@@ -43,9 +43,23 @@ export default function AIConnectionInfo() {
         </>
       )}
       <Note>
-        提供项目资料查询、发布预览、Jenkins 触发和日志查询。SQL
-        与配置只读参考，不提供自动执行入口。启动 MCP 前先启动本地应用。
+        提供项目、服务、环境、版本及
+        SQL/配置资料的增删改查，以及版本合并、发布预览、Jenkins
+        触发和日志查询。SQL 与配置可编辑为资料，执行与更新仍由人工处理。启动 MCP
+        前先启动本地应用。
       </Note>
+      <h3>让外部 AI 管理资料</h3>
+      <p>
+        例如：“创建项目并登记服务”“为测试环境的 API
+        服务关联两台主机”“新建版本并保存 SQL
+        变更”“合并这两个版本的发布资料，先给我看冲突”。
+      </p>
+      <p className="muted small">
+        records_list / record_get 查询后携带 revision 调用
+        record_create、record_update 或
+        record_delete。已有引用资料不能删除，就绪版本可归档。version_merge
+        先处理冲突，再生成发布预览。
+      </p>
     </section>
   );
 }

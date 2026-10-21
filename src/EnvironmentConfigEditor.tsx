@@ -1,16 +1,22 @@
-import { useState } from "react";
-import {
-  Database,
-  FileText,
-  Plus,
-  Save,
-  Server,
-  Trash2,
-  Workflow,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { Database, FileText, Save, Server, Workflow } from "lucide-react";
 import type { Environment, JenkinsProfile, JobBinding, Service } from "./types";
 import { Badge, Button, Field, Note } from "./ui";
 import { api, post } from "./api";
+import ServiceHosts, { newBinding } from "./ServiceHosts";
+
+const environmentKey = (environment: Environment) =>
+  JSON.stringify(environment, (key, value) => {
+    if (key === "credentialConfigured" || key === "dbCredentialConfigured")
+      return undefined;
+    if (value && typeof value === "object" && !Array.isArray(value))
+      return Object.fromEntries(
+        Object.keys(value)
+          .sort()
+          .map((name) => [name, value[name]]),
+      );
+    return value;
+  });
 
 export default function EnvironmentEditor({
   environment,
@@ -30,9 +36,20 @@ export default function EnvironmentEditor({
 }) {
   const [tab, setTab] = useState("ssh");
   const [draft, setDraft] = useState(environment);
+  const [base, setBase] = useState(environmentKey(environment));
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [metadata, setMetadata] = useState<Record<string, string>>({});
+  const incoming = environmentKey(environment);
+  const dirty =
+    environmentKey(draft) !== base || Object.values(secrets).some(Boolean);
+  const conflicting = incoming !== base && dirty;
+  useEffect(() => {
+    if (incoming !== base && !dirty) {
+      setDraft(environment);
+      setBase(incoming);
+    }
+  }, [incoming, base, dirty]);
   type TextKey =
     | "deployPath"
     | "backupPath"
@@ -72,15 +89,8 @@ export default function EnvironmentEditor({
       />
     );
   const binding = (service: Service): JobBinding =>
-    draft.bindings.find((b) => b.serviceId === service.id) || {
-      serviceId: service.id,
-      job: "",
-      parameters: "",
-      supportsBranch: false,
-      branchParameter: "BRANCH",
-      branches: [service.defaultBranch],
-      defaultBranch: service.defaultBranch,
-    };
+    draft.bindings.find((b) => b.serviceId === service.id) ||
+    newBinding(service);
   function updateBinding(value: JobBinding) {
     setDraft((old) => ({
       ...old,
@@ -91,7 +101,7 @@ export default function EnvironmentEditor({
     }));
   }
   const tabs = [
-    { id: "ssh", name: "服务器 SSH", icon: Server },
+    { id: "ssh", name: "服务主机 / SSH", icon: Server },
     { id: "mysql", name: "MySQL 数据库", icon: Database },
     { id: "jobs", name: "服务发布任务", icon: Workflow },
     { id: "files", name: "文件与路径", icon: FileText },
@@ -130,6 +140,10 @@ export default function EnvironmentEditor({
       <form
         onSubmit={async (e) => {
           e.preventDefault();
+          if (incoming !== base)
+            return notify(
+              "环境已被其他窗口或 AI 更新，请先加载最新配置再修改。",
+            );
           if (
             draft.bindings.some(
               (b) =>
@@ -145,7 +159,10 @@ export default function EnvironmentEditor({
             );
           if (
             draft.servers.some(
-              (s) => !s.host.trim() || !s.port.trim() || !s.username.trim(),
+              (s) =>
+                !s.host.trim() ||
+                !s.port.trim() ||
+                (s.authentication !== "environment" && !s.username.trim()),
             )
           )
             return notify("请补全每台服务器的地址、端口和账号。");
@@ -159,6 +176,7 @@ export default function EnvironmentEditor({
               ),
             );
             await onSave(draft, validSecrets);
+            setBase(environmentKey(draft));
             setSecrets({});
           } catch (error: any) {
             notify(`保存失败：${error.message}`);
@@ -168,148 +186,40 @@ export default function EnvironmentEditor({
         }}
       >
         <div className="editor-form">
+          {conflicting && (
+            <div role="alert" className="error-message">
+              环境已被其他窗口或 AI 更新，当前修改尚未保存。
+              <Button
+                onClick={() => {
+                  setDraft(environment);
+                  setBase(incoming);
+                  setSecrets({});
+                }}
+              >
+                加载最新配置并放弃当前修改
+              </Button>
+            </div>
+          )}
           {tab === "ssh" && (
             <>
-              <div className="form-section-title">
-                <h3>环境服务器</h3>
-                <p>
-                  可维护多台服务器，所有服务器共用下面的部署路径；仅保存连接资料。
-                </p>
-              </div>
-              {draft.servers.map((server, index) => (
-                <div className="server-edit-card" key={server.id}>
-                  <div className="between">
-                    <h3>服务器 {index + 1}</h3>
-                    <Button
-                      disabled={
-                        busy ||
-                        !environment.servers.some((s) => s.id === server.id)
-                      }
-                      onClick={() => {
-                        setBusy(true);
-                        void post(`/environments/${environment.id}/check`, {
-                          kind: "ssh",
-                          serverId: server.id,
-                        })
-                          .then((result) =>
-                            notify(
-                              `SSH 连接成功，主机指纹：${result.fingerprint}`,
-                            ),
-                          )
-                          .catch((error) => notify(error.message))
-                          .finally(() => setBusy(false));
-                      }}
-                    >
-                      检查已保存连接
-                    </Button>
-                    <Button
-                      aria-label={`移除服务器 ${index + 1}`}
-                      disabled={draft.servers.length === 1}
-                      onClick={() =>
-                        setDraft({
-                          ...draft,
-                          servers: draft.servers.filter(
-                            (s) => s.id !== server.id,
-                          ),
-                        })
-                      }
-                    >
-                      <Trash2 size={14} />
-                      移除
-                    </Button>
-                  </div>
-                  <div className="form-grid">
-                    {(
-                      [
-                        { key: "name", label: "服务器名称" },
-                        { key: "host", label: "服务器地址" },
-                        { key: "port", label: "SSH 端口" },
-                        { key: "username", label: "登录账号" },
-                      ] as const
-                    ).map((field) => (
-                      <Field key={field.key} label={field.label} required>
-                        <input
-                          required
-                          value={server[field.key]}
-                          onChange={(e) =>
-                            setDraft({
-                              ...draft,
-                              servers: draft.servers.map((s) =>
-                                s.id === server.id
-                                  ? { ...s, [field.key]: e.target.value }
-                                  : s,
-                              ),
-                            })
-                          }
-                        />
-                      </Field>
-                    ))}
-                    <Field label="认证方式">
-                      <select
-                        value={server.authentication}
-                        onChange={(e) => {
-                          const authentication = e.target
-                            .value as typeof server.authentication;
-                          setDraft({
-                            ...draft,
-                            servers: draft.servers.map((s) =>
-                              s.id === server.id ? { ...s, authentication } : s,
-                            ),
-                          });
-                          setSecrets((old) => ({ ...old, [server.id]: "" }));
-                        }}
-                      >
-                        <option value="password">账号密码</option>
-                        <option value="environment">
-                          SSH_NAME / SSH_PWD 环境变量
-                        </option>
-                        <option value="key">SSH 私钥</option>
-                      </select>
-                    </Field>
-                    <Field
-                      label={
-                        server.authentication === "key"
-                          ? "SSH 私钥"
-                          : "登录密码"
-                      }
-                    >
-                      {secret(
-                        server.id,
-                        server.authentication === "environment",
-                        server.authentication === "key",
-                      )}
-                    </Field>
-                  </div>
-                </div>
-              ))}
-              <Button
-                onClick={() =>
-                  setDraft({
-                    ...draft,
-                    servers: [
-                      ...draft.servers,
-                      {
-                        id: crypto.randomUUID(),
-                        name: `节点 ${draft.servers.length + 1}`,
-                        host: "",
-                        port: "22",
-                        username: "deployer",
-                        authentication: "password",
-                      },
-                    ],
-                  })
-                }
-              >
-                <Plus size={14} />
-                添加服务器
-              </Button>
+              <ServiceHosts
+                draft={draft}
+                saved={environment}
+                services={services}
+                setDraft={setDraft}
+                secrets={secrets}
+                setSecrets={setSecrets}
+                busy={busy}
+                setBusy={setBusy}
+                notify={notify}
+              />
               <div className="form-section-title">
                 <h3>共用路径</h3>
-                <p>当前环境只维护一份部署路径，所有节点使用相同路径。</p>
+                <p>当前环境共用一份部署路径，各服务的关联主机使用相同路径。</p>
               </div>
               <div className="form-grid">
-                <Field label="部署路径（所有服务器共用）" required>
-                  {input("deployPath")}
+                <Field label="部署路径（当前环境共用）">
+                  {input("deployPath", false)}
                 </Field>
                 <Field label="服务器备份目录">
                   {input("backupPath", false)}
@@ -558,7 +468,7 @@ export default function EnvironmentEditor({
                 <p>供人工操作时查看；工具发布时不上传或替换文件。</p>
               </div>
               <div className="form-grid">
-                <Field label="共用部署路径">{input("deployPath")}</Field>
+                <Field label="共用部署路径">{input("deployPath", false)}</Field>
                 <Field label="配置文件目录">{input("configPath", false)}</Field>
                 <Field label="服务器备份目录">
                   {input("backupPath", false)}
@@ -573,7 +483,11 @@ export default function EnvironmentEditor({
         </div>
         <div className="panel-footer">
           <span className="muted small">资料与加密凭据保存在本机</span>
-          <Button type="submit" variant="primary" disabled={busy}>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={busy || conflicting}
+          >
             <Save size={14} />
             保存环境配置
           </Button>

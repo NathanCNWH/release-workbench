@@ -40,6 +40,7 @@ const config = z.object({
 });
 const binding = z.object({
   serviceId: id,
+  serverIds: z.array(id).max(100).default([]),
   job: z.string().trim().max(2000),
   parameters: z.string().max(10000),
   supportsBranch: z.boolean(),
@@ -87,16 +88,27 @@ const schemas = {
         type: required,
         servers: z
           .array(
-            z.object({
-              id,
-              name: required,
-              host: required,
-              port,
-              username: required,
-              authentication: z.enum(["password", "environment", "key"]),
-            }),
+            z
+              .object({
+                id,
+                name: required,
+                host: required,
+                port,
+                username: text.default(""),
+                authentication: z.enum(["password", "environment", "key"]),
+              })
+              .superRefine((server, ctx) => {
+                if (
+                  server.authentication !== "environment" &&
+                  !server.username.trim()
+                )
+                  ctx.addIssue({
+                    code: "custom",
+                    path: ["username"],
+                    message: "密码或私钥认证需要登录账号",
+                  });
+              }),
           )
-          .min(1)
           .max(100),
         bindings: z.array(binding).max(300),
         deployPath: text,
@@ -205,6 +217,8 @@ export function validateCollection(store, name, input) {
     const refs = [
       ...store.get("environments").data,
       ...store.get("releases").data,
+      ...store.list("deployments"),
+      ...store.list("backups").filter((backup) => backup.projectId),
     ];
     if (refs.some((r) => !data.some((p) => p.id === r.projectId)))
       throw new AppError("有历史资料引用的项目不能删除");
@@ -218,6 +232,20 @@ export function validateCollection(store, name, input) {
         )
       )
         throw new AppError("已绑定任务的服务不能删除");
+    const previousProjects = store.get("projects").data;
+    for (const record of store.list("deployments"))
+      if (
+        record.services.some(
+          (service) =>
+            previousProjects
+              .find((p) => p.id === record.projectId)
+              ?.services.some((s) => s.id === service.serviceId) &&
+            !projects
+              .find((p) => p.id === record.projectId)
+              ?.services.some((s) => s.id === service.serviceId),
+        )
+      )
+        throw new AppError("存在发布历史引用的服务不能删除");
   }
   if (["releases", "environments"].includes(name)) {
     if (data.some((item) => !projects.some((p) => p.id === item.projectId)))
@@ -228,8 +256,28 @@ export function validateCollection(store, name, input) {
       "同一项目内名称或标识重复",
     );
     const before = store.get(name).data;
-    if (before.some((old) => !data.some((i) => i.id === old.id)))
-      throw new AppError("当前不支持永久删除版本或环境，请保留历史资料");
+    for (const old of before.filter(
+      (old) => !data.some((i) => i.id === old.id),
+    )) {
+      const referenced = store
+        .list("deployments")
+        .some((d) =>
+          name === "releases"
+            ? (d.versionIds || [d.versionId]).includes(old.id)
+            : d.environmentId === old.id,
+        );
+      const backedUp =
+        name === "environments" &&
+        store.list("backups").some((b) => b.environmentId === old.id);
+      if (
+        referenced ||
+        backedUp ||
+        (name === "releases" && old.status !== "草稿")
+      )
+        throw new AppError(
+          "存在历史引用或已固定的资料不能删除；版本可改为已归档",
+        );
+    }
     if (
       data.some((item) =>
         before.some(
@@ -260,6 +308,13 @@ export function validateCollection(store, name, input) {
       unique(e.servers, (s) => s.id);
       unique(e.bindings, (b) => b.serviceId);
       for (const b of e.bindings) {
+        unique(b.serverIds, (value) => value, "同一服务的主机不能重复");
+        if (
+          b.serverIds.some(
+            (serverId) => !e.servers.some((server) => server.id === serverId),
+          )
+        )
+          throw new AppError("服务关联的主机不属于当前环境或不存在");
         if (
           !projects
             .find((p) => p.id === e.projectId)
