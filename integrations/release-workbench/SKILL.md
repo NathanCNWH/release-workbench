@@ -13,7 +13,7 @@ description: 通过项目 MCP 管理本机 Release Workbench 的项目、服务�
 
 环境可以没有主机，也允许独立新增尚未关联服务的主机。每个服务的主机关系保存在该环境 `bindings[].serverIds`，主机资料放 `servers`，允许复用；页面连线与此关系一致。旧版未关联的主机保留待用户分配。新主机需唯一 id、name、host、port、authentication；仅 environment 认证可省略 username，实际读取应用启动进程的 SSH_NAME / SSH_PWD。绑定还需 serviceId、job、parameters、supportsBranch、branchParameter、branches、defaultBranch；只有支持分支的任务才传分支。数组更新前先保留已有内容，保持用户手动设定的项目服务顺序。
 
-连接密码不通过资料工具读写。删除需用户授权、`confirmed=true` 和最新 revision；有引用或固定的资料不能删除。归档版本用 `record_update` 设置 status=已归档。草稿可编辑资源，就绪/归档版本只允许状态转换，资源变更应新建版本。
+连接密码不通过资料工具读写。删除需用户授权、`confirmed=true` 和最新 revision；有引用或固定的资料不能删除。归档版本用 `record_update` 设置 status=已归档。就绪版本可先单独设置 status=草稿 取消就绪，再读取最新 revision 修改资源，不能在取消就绪的同一请求中修改资源。已归档版本不能直接恢复草稿，需要复制新版本。已有发布快照保留。
 
 ## 使用流程
 

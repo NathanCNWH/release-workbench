@@ -95,12 +95,14 @@ export function Modal({
   children,
   onClose,
   wide = false,
+  className = "",
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  className?: string;
 }) {
   const titleId = useId();
   const container = useRef<HTMLDivElement>(null);
@@ -154,7 +156,7 @@ export function Modal({
     >
       <div
         ref={container}
-        className={`modal ${wide ? "modal-wide" : ""}`}
+        className={`modal ${wide ? "modal-wide" : ""} ${className}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

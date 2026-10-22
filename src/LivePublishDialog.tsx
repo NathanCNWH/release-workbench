@@ -170,9 +170,15 @@ export default function LivePublishDialog({
   }
   return (
     <Modal
-      title={record ? "发布进度" : "发布服务"}
-      subtitle={`${projectName} · ${versionIds.length ? `合并 ${versionIds.length} 个版本的发布资料` : "独立发布（不关联版本）"}`}
+      key={record ? "progress" : plan ? "preview" : "selection"}
+      title={record ? "发布进度" : plan ? "发布预览" : "发布服务"}
+      subtitle={
+        plan && !record
+          ? `${plan.projectName} · ${plan.environmentName} · ${plan.versionName || "独立发布"} · ${plan.services.length} 个任务`
+          : `${projectName} · ${versionIds.length ? `合并 ${versionIds.length} 个版本的发布资料` : "独立发布（不关联版本）"}`
+      }
       wide
+      className="publish-dialog"
       onClose={onClose}
     >
       <div className="modal-body publish-body">
@@ -186,201 +192,205 @@ export default function LivePublishDialog({
           </div>
         )}
         {!record ? (
-          <>
-            <VersionPicker
-              versions={versions}
-              selected={versionIds}
-              disabled={busy}
-              onChange={(ids) => {
-                setVersionIds(ids);
-                setResolutions({});
-                reset();
-              }}
-            />
-            <div className="publish-target">
-              <span className="number-chip">01</span>
-              <Field label="选择环境">
-                <select
+          plan ? (
+            <>
+              <section className="plan-confirmation">
+                <h3>核对本次发布任务</h3>
+                {plan.services.map((service: ServiceBuild) => (
+                  <div key={service.serviceId}>
+                    <strong>{service.name}</strong>
+                    <code>
+                      {service.jenkinsName} / {service.job}
+                    </code>
+                    <p className="muted small">
+                      分支：{service.branch || "使用 Job 自身配置"}
+                    </p>
+                    <pre>{service.parameters || "无额外参数"}</pre>
+                  </div>
+                ))}
+              </section>
+              {plan.versionSnapshot && (
+                <VersionResources merge={plan.versionSnapshot} disabled />
+              )}
+            </>
+          ) : (
+            <>
+              <VersionPicker
+                versions={versions}
+                selected={versionIds}
+                disabled={busy}
+                onChange={(ids) => {
+                  setVersionIds(ids);
+                  setResolutions({});
+                  reset();
+                }}
+              />
+              <div className="publish-target">
+                <span className="number-chip">01</span>
+                <Field label="选择环境">
+                  <select
+                    disabled={busy}
+                    value={environmentId}
+                    onChange={(e) => {
+                      setEnvironmentId(e.target.value);
+                      setSelected([]);
+                      setBranches({});
+                      setResolutions({});
+                      reset();
+                    }}
+                  >
+                    <option value="" disabled>
+                      请选择环境
+                    </option>
+                    {environments.map((e) => (
+                      <option value={e.id} key={e.id}>
+                        {e.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <span className="muted small">
+                  {environment
+                    ? `${environment.deployPath || "未登记共用路径"} · 主机按服务关联`
+                    : "请先创建项目环境"}
+                </span>
+              </div>
+              <div className="between publish-service-heading">
+                <div className="inline">
+                  <span className="number-chip">02</span>
+                  <h3>选择发布服务 · 已选 {selected.length} 项</h3>
+                </div>
+                <Button
                   disabled={busy}
-                  value={environmentId}
-                  onChange={(e) => {
-                    setEnvironmentId(e.target.value);
-                    setSelected([]);
-                    setBranches({});
-                    setResolutions({});
+                  onClick={() => {
+                    setSelected(
+                      selected.length
+                        ? []
+                        : services.filter((s) => !reason(s)).map((s) => s.id),
+                    );
                     reset();
                   }}
                 >
-                  <option value="" disabled>
-                    请选择环境
-                  </option>
-                  {environments.map((e) => (
-                    <option value={e.id} key={e.id}>
-                      {e.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <span className="muted small">
-                {environment
-                  ? `${environment.deployPath || "未登记共用路径"} · 主机按服务关联`
-                  : "请先创建项目环境"}
-              </span>
-            </div>
-            <div className="between publish-service-heading">
-              <div className="inline">
-                <span className="number-chip">02</span>
-                <h3>选择发布服务 · 已选 {selected.length} 项</h3>
+                  {selected.length ? "取消全选" : "全选可发布服务"}
+                </Button>
               </div>
-              <Button
-                disabled={busy}
-                onClick={() => {
-                  setSelected(
-                    selected.length
-                      ? []
-                      : services.filter((s) => !reason(s)).map((s) => s.id),
-                  );
-                  reset();
-                }}
-              >
-                {selected.length ? "取消全选" : "全选可发布服务"}
-              </Button>
-            </div>
-            <div className="publish-services">
-              {services.map((service) => {
-                const binding = environment?.bindings.find(
-                    (b) => b.serviceId === service.id,
-                  ),
-                  disabled = reason(service),
-                  checked = selected.includes(service.id);
-                return (
-                  <article
-                    key={service.id}
-                    className={`publish-service ${checked ? "selected" : ""}`}
-                  >
-                    <div className="publish-service-main">
-                      <label className="checkbox">
-                        <input
-                          aria-label={`发布 ${service.name}`}
-                          type="checkbox"
-                          disabled={!!disabled || busy}
-                          checked={checked}
-                          onChange={(e) => {
-                            setSelected(
-                              e.target.checked
-                                ? [...selected, service.id]
-                                : selected.filter((id) => id !== service.id),
-                            );
-                            reset();
-                          }}
-                        />
-                        <span>
-                          <strong>{service.name}</strong>
-                          <small>{service.kind}</small>
-                        </span>
-                      </label>
-                      <Badge tone={disabled ? "orange" : "gray"}>
-                        {disabled || "已绑定"}
-                      </Badge>
-                    </div>
-                    <div className="job-reference">
-                      <Workflow size={14} />
-                      <code>{binding?.job || "尚未配置任务"}</code>
-                    </div>
-                    <p className="muted small">
-                      关联主机：
-                      {environment?.servers
-                        .filter((host) => binding?.serverIds?.includes(host.id))
-                        .map((host) => `${host.name} (${host.host})`)
-                        .join("、") || "未登记（Jenkins 仍使用 Job 自身配置）"}
-                    </p>
-                    {binding?.job && (
-                      <div className="publish-service-options">
-                        {binding.supportsBranch ? (
-                          <Field
-                            label={`发布分支 · ${service.name}`}
-                            hint={`参数：${binding.branchParameter}`}
-                          >
-                            <select
-                              disabled={!checked || busy}
-                              value={
-                                branches[service.id] || binding.defaultBranch
-                              }
-                              onChange={(e) => {
-                                setBranches({
-                                  ...branches,
-                                  [service.id]: e.target.value,
-                                });
-                                reset();
-                              }}
-                            >
-                              {binding.branches.map((b) => (
-                                <option key={b}>{b}</option>
-                              ))}
-                            </select>
-                          </Field>
-                        ) : (
-                          <span className="inline muted small">
-                            <GitBranch size={14} />
-                            使用 Job 自身配置
+              <div className="publish-services">
+                {services.map((service) => {
+                  const binding = environment?.bindings.find(
+                      (b) => b.serviceId === service.id,
+                    ),
+                    disabled = reason(service),
+                    checked = selected.includes(service.id);
+                  return (
+                    <article
+                      key={service.id}
+                      className={`publish-service ${checked ? "selected" : ""}`}
+                    >
+                      <div className="publish-service-main">
+                        <label className="checkbox">
+                          <input
+                            aria-label={`发布 ${service.name}`}
+                            type="checkbox"
+                            disabled={!!disabled || busy}
+                            checked={checked}
+                            onChange={(e) => {
+                              setSelected(
+                                e.target.checked
+                                  ? [...selected, service.id]
+                                  : selected.filter((id) => id !== service.id),
+                              );
+                              reset();
+                            }}
+                          />
+                          <span>
+                            <strong>{service.name}</strong>
+                            <small>{service.kind}</small>
                           </span>
-                        )}
-                        <div className="fixed-parameters">
-                          <span className="muted small">固定参数</span>
-                          <pre>{binding.parameters || "无额外参数"}</pre>
-                        </div>
+                        </label>
+                        <Badge tone={disabled ? "orange" : "gray"}>
+                          {disabled || "已绑定"}
+                        </Badge>
                       </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-            {!services.length && (
-              <Empty
-                title="项目尚未维护服务"
-                detail="请先添加服务，再为目标环境绑定 Jenkins Job。"
-              />
-            )}
-            {mergeError && <div className="error-message">{mergeError}</div>}
-            {merging && <p className="muted small">正在合并版本资料…</p>}
-            {merge && (
-              <VersionResources
-                merge={merge}
-                disabled={busy || merging}
-                onResolve={(key, id) => {
-                  setResolutions((old) => {
-                    const next = { ...old };
-                    if (id) next[key] = id;
-                    else delete next[key];
-                    return next;
-                  });
-                  reset();
-                }}
-              />
-            )}
-            {plan && (
-              <section className="plan-confirmation">
-                <h3>发布预览已生成</h3>
-                <p>
-                  {plan.environmentName} · {plan.versionName || "独立发布"} ·{" "}
-                  {plan.services.length} 个任务
-                </p>
-                {plan.services.map((s: ServiceBuild) => (
-                  <div key={s.serviceId}>
-                    <strong>{s.name}</strong>
-                    <code>
-                      {s.jenkinsName} / {s.job}
-                    </code>
-                    <pre>{s.parameters || "无额外参数"}</pre>
-                  </div>
-                ))}
-                <p>
-                  确认下方任务和参数后，点击“确认触发 Jenkins”。预览 10
-                  分钟内有效。
-                </p>
-              </section>
-            )}
-          </>
+                      <div className="job-reference">
+                        <Workflow size={14} />
+                        <code>{binding?.job || "尚未配置任务"}</code>
+                      </div>
+                      <p className="muted small">
+                        关联主机：
+                        {environment?.servers
+                          .filter((host) =>
+                            binding?.serverIds?.includes(host.id),
+                          )
+                          .map((host) => `${host.name} (${host.host})`)
+                          .join("、") ||
+                          "未登记（Jenkins 仍使用 Job 自身配置）"}
+                      </p>
+                      {binding?.job && (
+                        <div className="publish-service-options">
+                          {binding.supportsBranch ? (
+                            <Field
+                              label={`发布分支 · ${service.name}`}
+                              hint={`参数：${binding.branchParameter}`}
+                            >
+                              <select
+                                disabled={!checked || busy}
+                                value={
+                                  branches[service.id] || binding.defaultBranch
+                                }
+                                onChange={(e) => {
+                                  setBranches({
+                                    ...branches,
+                                    [service.id]: e.target.value,
+                                  });
+                                  reset();
+                                }}
+                              >
+                                {binding.branches.map((b) => (
+                                  <option key={b}>{b}</option>
+                                ))}
+                              </select>
+                            </Field>
+                          ) : (
+                            <span className="inline muted small">
+                              <GitBranch size={14} />
+                              使用 Job 自身配置
+                            </span>
+                          )}
+                          <div className="fixed-parameters">
+                            <span className="muted small">固定参数</span>
+                            <pre>{binding.parameters || "无额外参数"}</pre>
+                          </div>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+              {!services.length && (
+                <Empty
+                  title="项目尚未维护服务"
+                  detail="请先添加服务，再为目标环境绑定 Jenkins Job。"
+                />
+              )}
+              {mergeError && <div className="error-message">{mergeError}</div>}
+              {merging && <p className="muted small">正在合并版本资料…</p>}
+              {merge && (
+                <VersionResources
+                  merge={merge}
+                  disabled={busy || merging}
+                  onResolve={(key, id) => {
+                    setResolutions((old) => {
+                      const next = { ...old };
+                      if (id) next[key] = id;
+                      else delete next[key];
+                      return next;
+                    });
+                    reset();
+                  }}
+                />
+              )}
+            </>
+          )
         ) : (
           <>
             <div className="publish-progress">
@@ -400,11 +410,20 @@ export default function LivePublishDialog({
       </div>
       <div className="modal-footer">
         <span className="muted small">
-          {record ? "状态来自 Jenkins" : "检查服务、分支与参数后发布"}
+          {record
+            ? "状态来自 Jenkins"
+            : plan
+              ? "预览 10 分钟内有效，请核对后确认"
+              : "检查服务、分支与参数后发布"}
         </span>
-        {!record && (
+        {!record && !plan && (
           <Button disabled={busy} onClick={onConfigure}>
             管理环境任务
+          </Button>
+        )}
+        {!record && plan && (
+          <Button disabled={busy} onClick={reset}>
+            返回修改
           </Button>
         )}
         <Button onClick={onClose}>关闭</Button>

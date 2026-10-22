@@ -329,9 +329,11 @@ export function validateCollection(store, name, input) {
         old.status !== "草稿" &&
         versionResourceKey(old) !== versionResourceKey(item)
       )
-        throw new AppError("就绪或归档版本不能修改资源，请复制为新版本");
-      if (old && old.status !== "草稿" && item.status === "草稿")
-        throw new AppError("固定版本不能退回草稿");
+        throw new AppError(
+          "就绪或归档版本不能修改资源；就绪版本请先取消就绪，归档版本请复制为新版本",
+        );
+      if (old?.status === "已归档" && item.status === "草稿")
+        throw new AppError("已归档版本不能退回草稿，请复制为新版本");
     }
   if (name === "environments")
     for (const e of data) {

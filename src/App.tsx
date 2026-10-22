@@ -33,6 +33,7 @@ import {
   Server,
   Settings2,
   ShieldCheck,
+  Undo2,
   X,
 } from "lucide-react";
 import { nextVersion, planSteps } from "./data";
@@ -973,6 +974,28 @@ export default function App() {
                 复制为新版本
               </Button>
             )}
+            {release.status === "就绪" && (
+              <Button
+                disabled={!!workbench.pending}
+                onClick={() => {
+                  void workbench
+                    .update("releases", (previous) =>
+                      previous.map((value) =>
+                        value.id === release.id
+                          ? { ...value, status: "草稿" }
+                          : value,
+                      ),
+                    )
+                    .then(() =>
+                      notify("已取消就绪，版本恢复为草稿，可以继续编辑。"),
+                    )
+                    .catch((error) => notify(`取消就绪失败：${error.message}`));
+                }}
+              >
+                <Undo2 size={15} />
+                取消就绪
+              </Button>
+            )}
           </div>
         </div>
         <section className="panel release-panel">
@@ -1432,7 +1455,9 @@ export default function App() {
         {!editable && (
           <Note>
             <LockKeyhole size={14} />
-            就绪或归档版本的资源已锁定。需要修改时，请复制为新的草稿版本。
+            {release.status === "就绪"
+              ? "版本资料已锁定，点击顶部“取消就绪”可恢复草稿并继续编辑。"
+              : "归档版本的资源已锁定。需要修改时，请复制为新的草稿版本。"}
           </Note>
         )}
       </>
@@ -1998,7 +2023,7 @@ export default function App() {
           <span>
             你的项目，每一次发布都有记录。
             <i />
-            本地应用 v0.6
+            本地应用 v0.6.1
           </span>
         </footer>
       </div>

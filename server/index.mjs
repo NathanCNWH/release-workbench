@@ -110,7 +110,7 @@ export async function createApp({
       if (req.method === "GET" && path === "/api/health")
         return json(res, 200, {
           app: "release-workbench",
-          version: "0.6.0",
+          version: "0.6.1",
           status: closing ? "stopping" : "ready",
           instanceId,
           pid: process.pid,

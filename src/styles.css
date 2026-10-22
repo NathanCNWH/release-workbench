@@ -55,6 +55,19 @@
 .plan-confirmation > p {
   margin: 12px 0 0;
 }
+.modal.publish-dialog {
+  overflow: hidden;
+}
+.publish-dialog > .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.publish-dialog > .modal-heading,
+.publish-dialog > .modal-footer {
+  flex-shrink: 0;
+  position: static;
+}
 .mcp-settings {
   padding: 24px;
   margin: 22px 0;

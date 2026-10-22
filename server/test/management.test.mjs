@@ -223,6 +223,13 @@ test("MCP manages all six business entities with revisions and reference protect
       { entity: "version", projectId: p2.id },
       { name: "20261021-02", status: "就绪" },
     );
+    const fixedScope = { entity: "version", projectId: p2.id };
+    await update(fixedScope, fixed.id, { status: "草稿" });
+    const editable = await update(fixedScope, fixed.id, {
+      title: "取消就绪后可继续编辑",
+    });
+    assert.equal(editable.record.title, "取消就绪后可继续编辑");
+    await update(fixedScope, fixed.id, { status: "就绪" });
     const deleteFixed = await raw("record_delete", {
       entity: "version",
       projectId: p2.id,

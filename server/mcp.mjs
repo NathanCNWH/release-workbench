@@ -31,7 +31,7 @@ async function call(path, input) {
   if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
   return value;
 }
-const server = new McpServer({ name: "release-workbench", version: "0.6.0" });
+const server = new McpServer({ name: "release-workbench", version: "0.6.1" });
 function tool(name, description, inputSchema, handler, readOnly = true) {
   server.registerTool(
     name,
@@ -148,7 +148,7 @@ tool(
 );
 tool(
   "record_update",
-  "按 data 中的字段部分更新业务资料；revision 使用最近查询值。就绪/归档版本不可改资源，可用 status=已归档归档版本。保留 environment 中不变的 servers/bindings 内容后再提交这两个数组。",
+  "按 data 中的字段部分更新业务资料；revision 使用最近查询值。就绪版本先单独设置 status=草稿 取消就绪，再修改资源；已归档版本不能直接恢复草稿。可用 status=已归档归档版本。保留 environment 中不变的 servers/bindings 内容后再提交这两个数组。",
   {
     ...scope,
     recordId: z.string(),
