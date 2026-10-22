@@ -19,7 +19,7 @@ export function VersionPicker({
         <span className="muted small">可不选，直接发布服务</span>
       </div>
       <p className="muted small">
-        勾选版本后汇总 SQL / 配置资料，保留原版本。下方顺序即合并顺序。
+        勾选版本后自动带入关联服务，并汇总 SQL / 配置资料，保留原版本。下方顺序即合并顺序。
       </p>
       <div className="version-options">
         {versions.map((version) => (

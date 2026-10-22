@@ -43,7 +43,36 @@ export default function LivePublishDialog({
   const [environmentId, setEnvironmentId] = useState(
     initialEnvironmentId || environments[0]?.id || "",
   );
-  const [selected, setSelected] = useState<string[]>([]),
+  const environment = environments.find((e) => e.id === environmentId);
+  const reason = (service: Service, target = environment) => {
+    const binding = target?.bindings.find((b) => b.serviceId === service.id),
+      profile = profiles.find(
+        (p) => p.id === (service.kind === "前端应用" ? "frontend" : "backend"),
+      );
+    if (!binding?.job) return "当前环境未绑定 Job";
+    if (!profile?.url || !profile.username || !profile.credentialConfigured)
+      return "全局 Jenkins 尚未配置完整";
+    if (
+      binding.supportsBranch &&
+      (!binding.branchParameter ||
+        !binding.branches.includes(binding.defaultBranch))
+    )
+      return "分支配置不完整";
+    return "";
+  };
+  const servicesForVersions = (ids: string[], target = environment) => {
+    const related = new Set(
+      versions
+        .filter((v) => ids.includes(v.id))
+        .flatMap((v) => v.serviceIds || []),
+    );
+    return services
+      .filter((s) => related.has(s.id) && !reason(s, target))
+      .map((s) => s.id);
+  };
+  const [selected, setSelected] = useState<string[]>(() =>
+    servicesForVersions(version ? [version.id] : []),
+  ),
     [branches, setBranches] = useState<Record<string, string>>({});
   const [plan, setPlan] = useState<any>(null),
     [record, setRecord] = useState<Deployment | null>(null),
@@ -59,6 +88,14 @@ export default function LivePublishDialog({
   const versionKey = JSON.stringify(
     versions.filter((v) => versionIds.includes(v.id)),
   );
+  const selectedVersions = versions.filter((v) => versionIds.includes(v.id));
+  const relatedServices = new Set(
+    selectedVersions.flatMap((v) => v.serviceIds || []),
+  );
+  const unavailableServices = services.filter(
+    (s) => relatedServices.has(s.id) && reason(s),
+  );
+  const emptyVersions = selectedVersions.filter((v) => !v.serviceIds?.length);
   useEffect(() => {
     let current = true;
     setMerging(true);
@@ -91,7 +128,6 @@ export default function LivePublishDialog({
     JSON.stringify(resolutions),
     versionKey,
   ]);
-  const environment = environments.find((e) => e.id === environmentId);
   useEffect(() => {
     if (!record || done(record.status)) return;
     const timer = setInterval(
@@ -106,24 +142,6 @@ export default function LivePublishDialog({
   const reset = () => {
     setPlan(null);
     setError("");
-  };
-  const reason = (service: Service) => {
-    const binding = environment?.bindings.find(
-        (b) => b.serviceId === service.id,
-      ),
-      profile = profiles.find(
-        (p) => p.id === (service.kind === "前端应用" ? "frontend" : "backend"),
-      );
-    if (!binding?.job) return "当前环境未绑定 Job";
-    if (!profile?.url || !profile.username || !profile.credentialConfigured)
-      return "全局 Jenkins 尚未配置完整";
-    if (
-      binding.supportsBranch &&
-      (!binding.branchParameter ||
-        !binding.branches.includes(binding.defaultBranch))
-    )
-      return "分支配置不完整";
-    return "";
   };
   async function preview() {
     setBusy(true);
@@ -220,6 +238,20 @@ export default function LivePublishDialog({
                 selected={versionIds}
                 disabled={busy}
                 onChange={(ids) => {
+                  if (
+                    ids.length !== versionIds.length ||
+                    ids.some((id) => !versionIds.includes(id))
+                  ) {
+                    const next = servicesForVersions(ids);
+                    setSelected(next);
+                    setBranches((old) =>
+                      Object.fromEntries(
+                        Object.entries(old).filter(
+                          ([id]) => next.includes(id) && selected.includes(id),
+                        ),
+                      ),
+                    );
+                  }
                   setVersionIds(ids);
                   setResolutions({});
                   reset();
@@ -233,7 +265,12 @@ export default function LivePublishDialog({
                     value={environmentId}
                     onChange={(e) => {
                       setEnvironmentId(e.target.value);
-                      setSelected([]);
+                      setSelected(
+                        servicesForVersions(
+                          versionIds,
+                          environments.find((env) => env.id === e.target.value),
+                        ),
+                      );
                       setBranches({});
                       setResolutions({});
                       reset();
@@ -255,6 +292,33 @@ export default function LivePublishDialog({
                     : "请先创建项目环境"}
                 </span>
               </div>
+              {!!versionIds.length && (
+                <Note>
+                  <div role="status">
+                    <p>
+                      已按所选版本带入可发布服务，可继续手动增减。增减版本或切换环境会重新带入；仅调整版本顺序会保留选择。
+                    </p>
+                    {!!emptyVersions.length && (
+                      <p>
+                        {emptyVersions.map((v) => v.name).join("、")}
+                        未登记涉及服务，请手动选择。
+                      </p>
+                    )}
+                    {!!unavailableServices.length && (
+                      <>
+                        <p>以下版本关联服务未带入：</p>
+                        <ul>
+                          {unavailableServices.map((s) => (
+                            <li key={s.id}>
+                              {s.name}：{reason(s)}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                </Note>
+              )}
               <div className="between publish-service-heading">
                 <div className="inline">
                   <span className="number-chip">02</span>

@@ -31,7 +31,7 @@ async function call(path, input) {
   if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
   return value;
 }
-const server = new McpServer({ name: "release-workbench", version: "0.6.1" });
+const server = new McpServer({ name: "release-workbench", version: "0.6.2" });
 function tool(name, description, inputSchema, handler, readOnly = true) {
   server.registerTool(
     name,

@@ -2023,7 +2023,7 @@ export default function App() {
           <span>
             你的项目，每一次发布都有记录。
             <i />
-            本地应用 v0.6.1
+            本地应用 v0.6.2
           </span>
         </footer>
       </div>
