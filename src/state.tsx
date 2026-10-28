@@ -10,6 +10,7 @@ import {
 } from "react";
 import type {
   Project,
+  ProjectNote,
   Release,
   Environment,
   JenkinsProfile,
@@ -20,6 +21,7 @@ import { api } from "./api";
 
 type Collections = {
   projects: Project[];
+  projectNotes: ProjectNote[];
   releases: Release[];
   environments: Environment[];
   jenkinsProfiles: JenkinsProfile[];

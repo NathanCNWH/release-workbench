@@ -24,6 +24,7 @@ export const collections = [
   "releases",
   "environments",
   "jenkinsProfiles",
+  "projectNotes",
 ];
 export class AppError extends Error {
   constructor(message, status = 400) {

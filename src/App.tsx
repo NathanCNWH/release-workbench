@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownToLine,
   ArrowLeft,
@@ -66,6 +66,7 @@ import PublishDialog, { DeploymentDetail } from "./LivePublishDialog";
 import BackupsPage from "./BackupsPage";
 import AIConnectionInfo from "./AIConnectionInfo";
 import ProjectSwitcher from "./ProjectSwitcher";
+import ProjectNotes from "./ProjectNotes";
 import VersionServices, { VersionServiceEditor } from "./VersionServices";
 import { useCollection, useWorkbench } from "./state";
 import { api } from "./api";
@@ -85,6 +86,7 @@ const navigation = [
   { id: "overview", title: "项目概览", icon: LayoutDashboard },
   { id: "projects", title: "全部项目", icon: FolderGit2 },
   { id: "services", title: "服务管理", icon: Code2 },
+  { id: "notes", title: "项目笔记", icon: FileText },
   { id: "versions", title: "版本管理", icon: Layers3 },
   { id: "environments", title: "环境连接", icon: Server },
   { id: "deployments", title: "部署记录", icon: History },
@@ -135,6 +137,7 @@ async function importText(
 }
 
 export default function App() {
+  const notesNavigationGuard = useRef<(() => boolean) | null>(null);
   const [projectServiceDrafts, setProjectServiceDrafts] = useState<Service[]>(
     [],
   );
@@ -217,7 +220,14 @@ export default function App() {
     const timer = setTimeout(() => setToast(""), 4200);
     return () => clearTimeout(timer);
   }, [toast]);
+  function canLeaveNotes() {
+    if (notesNavigationGuard.current && !notesNavigationGuard.current())
+      return false;
+    notesNavigationGuard.current = null;
+    return true;
+  }
   function navigate(destination: Page) {
+    if (destination !== page && !canLeaveNotes()) return;
     setPage(destination);
     setVersionOpen(false);
     setSearch("");
@@ -225,6 +235,7 @@ export default function App() {
     setQuery("");
   }
   function selectProject(id: string) {
+    if (id !== projectId && !canLeaveNotes()) return false;
     setProjectId(id);
     setReleaseId(releases.find((item) => item.projectId === id)?.id || "");
     setEnvironmentId(
@@ -232,8 +243,10 @@ export default function App() {
     );
     setVersionOpen(false);
     setSearch("");
+    return true;
   }
   function openRelease(id: string, tab = "summary") {
+    if (!canLeaveNotes()) return;
     setReleaseId(id);
     setPage("versions");
     setVersionOpen(true);
@@ -820,8 +833,7 @@ export default function App() {
                   <button
                     className="text-button"
                     onClick={() => {
-                      selectProject(item.id);
-                      navigate("overview");
+                      if (selectProject(item.id)) navigate("overview");
                     }}
                   >
                     进入项目
@@ -1777,6 +1789,14 @@ export default function App() {
 
   const views: Record<Page, () => React.ReactNode> = {
     overview: renderOverview,
+    notes: () => (
+      <ProjectNotes
+        projectId={projectId}
+        projectName={project.name}
+        navigationGuard={notesNavigationGuard}
+        notify={notify}
+      />
+    ),
     services: () => (
       <ServiceManager
         services={projectServices}
@@ -1941,8 +1961,7 @@ export default function App() {
                     <button
                       key={item.id}
                       onClick={() => {
-                        selectProject(item.id);
-                        navigate("overview");
+                        if (selectProject(item.id)) navigate("overview");
                       }}
                     >
                       <FolderGit2 size={16} />
@@ -1957,8 +1976,7 @@ export default function App() {
                     <button
                       key={item.id}
                       onClick={() => {
-                        selectProject(item.projectId);
-                        openRelease(item.id);
+                        if (selectProject(item.projectId)) openRelease(item.id);
                       }}
                     >
                       <Package size={16} />
@@ -2023,7 +2041,7 @@ export default function App() {
           <span>
             你的项目，每一次发布都有记录。
             <i />
-            本地应用 v0.6.2
+            本地应用 v0.7.0
           </span>
         </footer>
       </div>

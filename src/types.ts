@@ -2,6 +2,7 @@ export type Page =
   | "overview"
   | "projects"
   | "services"
+  | "notes"
   | "jenkins"
   | "versions"
   | "environments"
@@ -9,6 +10,14 @@ export type Page =
   | "backups"
   | "ai";
 export type ReleaseStatus = "草稿" | "就绪" | "已归档";
+export interface ProjectNote {
+  id: string;
+  projectId: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface Project {
   id: string;
   name: string;

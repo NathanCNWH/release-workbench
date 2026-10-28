@@ -59,6 +59,18 @@ const versionResourceKey = (version) =>
         : value,
   );
 const schemas = {
+  projectNotes: z
+    .array(
+      z.object({
+        id,
+        projectId: id,
+        title: required,
+        content: z.string().max(1000000),
+        createdAt: z.string().datetime().optional(),
+        updatedAt: z.string().datetime().optional(),
+      }),
+    )
+    .max(5000),
   projects: z
     .array(
       z.object({
@@ -228,6 +240,7 @@ export function validateCollection(store, name, input) {
     const refs = [
       ...store.get("environments").data,
       ...store.get("releases").data,
+      ...store.get("projectNotes").data,
       ...store.list("deployments"),
       ...store.list("backups").filter((backup) => backup.projectId),
     ];
@@ -267,6 +280,22 @@ export function validateCollection(store, name, input) {
         )
       )
         throw new AppError("存在发布历史引用的服务不能删除");
+  }
+  if (name === "projectNotes") {
+    const before = store.get(name).data;
+    const now = new Date().toISOString();
+    for (const item of data) {
+      if (!projects.some((p) => p.id === item.projectId))
+        throw new AppError("所属项目不存在");
+      const old = before.find((note) => note.id === item.id);
+      if (old && old.projectId !== item.projectId)
+        throw new AppError("笔记不能移动到其他项目");
+      item.createdAt = old?.createdAt || now;
+      item.updatedAt =
+        old && old.title === item.title && old.content === item.content
+          ? old.updatedAt
+          : now;
+    }
   }
   if (["releases", "environments"].includes(name)) {
     if (data.some((item) => !projects.some((p) => p.id === item.projectId)))

@@ -1,7 +1,7 @@
 {
   "name": "release-workbench",
   "private": true,
-  "version": "0.6.2",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -21,6 +21,7 @@
     "mysql2": "^3.24.6",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "react-markdown": "^10.1.0",
     "ssh2": "^1.17.0",
     "zod": "^3.25.76"
   },

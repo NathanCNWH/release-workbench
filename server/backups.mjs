@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { createGzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 import { spawn } from "node:child_process";
-import { AppError } from "./store.mjs";
+import { AppError, collections } from "./store.mjs";
 
 export class Backups {
   constructor(store, { spawnProcess = spawn } = {}) {
@@ -36,11 +36,9 @@ export class Backups {
         {
           format: "release-workbench-v1",
           created: new Date().toISOString(),
-          note: "连接凭据未导出；SQL/配置文本保持原样，请按敏感资料保管。",
+          note: "连接凭据未导出；SQL/配置及项目笔记保持原样，请按敏感资料保管。",
           collections: Object.fromEntries(
-            ["projects", "releases", "environments", "jenkinsProfiles"].map(
-              (k) => [k, state[k].data],
-            ),
+            collections.map((k) => [k, state[k].data]),
           ),
           deployments: state.deployments,
         },
