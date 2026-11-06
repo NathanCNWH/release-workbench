@@ -26,6 +26,39 @@ export class Jenkins {
       throw new AppError("Jenkins 返回了站点范围之外的链接，已拒绝跟随");
     return url.href;
   }
+  buildUrl(path, number, declaredUrl) {
+    if (!Number.isSafeInteger(number) || number < 1)
+      throw new AppError("Jenkins 返回的构建号无效，无法确认构建结果。");
+    const expected = `${jobUrl(this.base, path)}${number}/`;
+    if (declaredUrl) {
+      const declared = new URL(declaredUrl, `${this.base}/`);
+      if (
+        !["http:", "https:"].includes(declared.protocol) ||
+        declared.username ||
+        declared.password ||
+        declared.search ||
+        declared.hash ||
+        declared.pathname.replace(/\/$/, "") !==
+          new URL(expected).pathname.replace(/\/$/, "")
+      )
+        throw new AppError(
+          "Jenkins 返回的构建地址与所选任务或构建号不匹配，无法确认构建结果。",
+        );
+    }
+    // Jenkins may advertise its internal origin. Only use the configured entry.
+    return this.safeUrl(expected);
+  }
+  queueId(url) {
+    const match = this.safeUrl(url).match(/\/queue\/item\/([1-9]\d*)\/?$/),
+      number = match && Number(match[1]);
+    if (
+      !Number.isSafeInteger(number) ||
+      this.safeUrl(url).replace(/\/$/, "") !==
+        `${this.base}/queue/item/${number}`
+    )
+      throw new AppError("Jenkins 队列地址无效，无法找回对应构建。");
+    return number;
+  }
   async request(url, options = {}) {
     const headers = {
       Accept: "application/json",
@@ -48,11 +81,14 @@ export class Jenkins {
   }
   async json(url) {
     const response = await this.request(url);
-    if (!response.ok)
-      throw new AppError(
+    if (!response.ok) {
+      const error = new AppError(
         `Jenkins 请求失败（HTTP ${response.status}），请检查地址、账号权限和 Token。`,
         502,
       );
+      error.httpStatus = response.status;
+      throw error;
+    }
     try {
       return await response.json();
     } catch {
@@ -146,9 +182,25 @@ export class Jenkins {
   async queue(url) {
     return this.json(`${this.safeUrl(url).replace(/\/$/, "")}/api/json`);
   }
+  async findBuildByQueueId(path, queueUrl) {
+    const queueId = this.queueId(queueUrl),
+      job = await this.json(
+        `${jobUrl(this.base, path)}api/json?tree=builds[number,queueId,url]{0,500}`,
+      ),
+      matches = (job.builds || []).filter((build) => build.queueId === queueId);
+    if (matches.length !== 1)
+      throw new AppError(
+        "Jenkins 队列记录已失效，无法从该任务最近 500 次构建中确认对应记录，请到 Jenkins 核对后重新查询。",
+      );
+    const build = matches[0];
+    return {
+      number: build.number,
+      url: this.buildUrl(path, build.number, build.url),
+    };
+  }
   async build(url) {
     return this.json(
-      `${this.safeUrl(url).replace(/\/$/, "")}/api/json?tree=number,building,result,duration,url`,
+      `${this.safeUrl(url).replace(/\/$/, "")}/api/json?tree=number,queueId,timestamp,building,result,duration,url`,
     );
   }
   async logs(url) {

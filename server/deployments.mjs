@@ -1,6 +1,6 @@
 import { randomUUID, createHash } from "node:crypto";
 import { AppError } from "./store.mjs";
-import { Jenkins, jobUrl } from "./jenkins.mjs";
+import { Jenkins } from "./jenkins.mjs";
 import { parameters } from "./validation.mjs";
 import { mergeVersions } from "./versions.mjs";
 
@@ -21,7 +21,7 @@ export class Deployments {
     this.pollMs = pollMs;
     this.timeoutMs = timeoutMs;
     this.client = client;
-    this.active = new Set();
+    this.active = new Map();
     this.timer = null;
   }
   inputs(input) {
@@ -196,22 +196,34 @@ export class Deployments {
     else if (states.includes("成功")) record.status = "部分失败";
     else if (states.every((s) => s === "已中止")) record.status = "已中止";
     else record.status = "失败";
-    if (terminal(record.status))
-      record.duration = `${Math.max(1, Math.round((Date.now() - Date.parse(record.started)) / 1000))} 秒`;
+    if (terminal(record.status)) {
+      const completed = record.services.map((s) => Date.parse(s.completedAt)),
+        finished = completed.every(Number.isFinite)
+          ? Math.max(...completed)
+          : Date.now();
+      record.duration = `${Math.max(1, Math.round((finished - Date.parse(record.started)) / 1000))} 秒`;
+    }
     return record;
   }
+  pollService(id, serviceId, options = {}) {
+    const key = `${id}:${serviceId}`;
+    if (this.active.has(key)) return this.active.get(key);
+    const task = Promise.resolve()
+      .then(() => this.advance(id, serviceId, options))
+      .finally(() => this.active.delete(key));
+    this.active.set(key, task);
+    return task;
+  }
   async tick() {
+    const tasks = [];
     for (const record of this.store
       .list("deployments")
       .filter((d) => !terminal(d.status)))
       for (const service of record.services) {
-        const key = `${record.id}:${service.serviceId}`;
-        if (this.active.has(key) || terminal(service.status)) continue;
-        this.active.add(key);
-        void this.advance(record.id, service.serviceId).finally(() =>
-          this.active.delete(key),
-        );
+        if (terminal(service.status)) continue;
+        tasks.push(this.pollService(record.id, service.serviceId));
       }
+    await Promise.all(tasks);
   }
   saveService(id, serviceId, update) {
     const record = this.store.deployment(id);
@@ -220,15 +232,27 @@ export class Deployments {
     );
     this.store.record("deployments", id, this.aggregate(record));
   }
-  async advance(id, serviceId) {
+  async advance(id, serviceId, { ignoreTimeout = false } = {}) {
     const record = this.store.deployment(id),
       service = record.services.find((s) => s.serviceId === serviceId);
-    const token = this.store.secret(`jenkins:${service.profileId}`);
-    const client = this.client(
-      { url: service.jenkinsUrl, username: service.jenkinsUser },
-      token,
-    );
     try {
+      const token = this.store.secret(`jenkins:${service.profileId}`),
+        client = this.client(
+          { url: service.jenkinsUrl, username: service.jenkinsUser },
+          token,
+        ),
+        waiting = (status, log) => {
+          const expired =
+            !ignoreTimeout &&
+            Date.now() - Date.parse(record.started) > this.timeoutMs;
+          this.saveService(id, serviceId, {
+            status: expired ? "结果未知" : status,
+            lastError: "",
+            log: expired
+              ? "等待构建超过上限，请到 Jenkins 核对真实结果或重新查询。"
+              : log,
+          });
+        };
       if (service.status === "待提交") {
         // Persist the uncertain boundary before the non-idempotent remote POST.
         this.saveService(id, serviceId, {
@@ -250,43 +274,70 @@ export class Deployments {
         this.saveService(id, serviceId, {
           status: "排队中",
           queueUrl,
+          lastError: "",
           log: "Jenkins 已接受任务，正在等待队列分配构建。",
         });
         return;
       }
-      if (Date.now() - Date.parse(record.started) > this.timeoutMs) {
-        this.saveService(id, serviceId, {
-          status: "结果未知",
-          log: "等待构建超过上限，请到 Jenkins 核对真实结果。",
-        });
-        return;
-      }
-      if (service.queueUrl && !service.buildUrl) {
-        const queue = await client.queue(service.queueUrl);
+      let buildUrl = service.buildUrl,
+        buildNumber = service.buildNumber;
+      if (service.queueUrl && !buildUrl) {
+        let queue;
+        try {
+          queue = await client.queue(service.queueUrl);
+        } catch (error) {
+          if (error.httpStatus !== 404) throw error;
+          queue = {
+            executable: await client.findBuildByQueueId(
+              service.job,
+              service.queueUrl,
+            ),
+          };
+        }
         if (queue.cancelled) {
           this.saveService(id, serviceId, {
             status: "已中止",
+            lastError: "",
             log: "任务在 Jenkins 队列中被取消。",
+            completedAt: new Date().toISOString(),
           });
           return;
         }
-        if (!queue.executable?.url) return;
-        const buildUrl = client.safeUrl(queue.executable.url);
+        if (!queue.executable) {
+          waiting("排队中", queue.why || "Jenkins 任务仍在队列中，等待分配构建。");
+          return;
+        }
+        buildNumber = queue.executable.number;
+        buildUrl = client.buildUrl(
+          service.job,
+          buildNumber,
+          queue.executable.url,
+        );
         this.saveService(id, serviceId, {
           status: "构建中",
           buildUrl,
-          buildNumber: queue.executable.number,
+          buildNumber,
           consoleUrl: `${buildUrl.replace(/\/$/, "")}/console`,
+          lastError: "",
           log: "构建已开始，正在等待最终结果。",
         });
-        return;
       }
-      if (service.buildUrl) {
-        const build = await client.build(service.buildUrl);
-        if (build.building || !build.result) return;
+      if (buildUrl) {
+        const build = await client.build(buildUrl);
+        if (
+          (build.number !== undefined && build.number !== buildNumber) ||
+          (service.queueUrl &&
+            build.queueId !== undefined &&
+            build.queueId !== client.queueId(service.queueUrl))
+        )
+          throw new AppError("Jenkins 构建信息与原部署记录不匹配，无法确认结果。");
+        if (build.building || !build.result) {
+          waiting("构建中", "构建正在执行，等待 Jenkins 最终结果。");
+          return;
+        }
         let log;
         try {
-          log = this.store.redact(await client.logs(service.buildUrl));
+          log = this.store.redact(await client.logs(buildUrl));
         } catch {
           log = "构建结果已获取，日志暂不可读，请打开 Jenkins 控制台。";
         }
@@ -299,14 +350,22 @@ export class Deployments {
         this.saveService(id, serviceId, {
           status,
           jenkinsResult: build.result,
+          lastError: "",
           log,
-          completedAt: new Date().toISOString(),
+          completedAt: new Date(
+            Number.isFinite(build.timestamp) && Number.isFinite(build.duration)
+              ? build.timestamp + build.duration
+              : Date.now(),
+          ).toISOString(),
         });
       }
     } catch (error) {
       this.saveService(id, serviceId, {
+        status: "结果未知",
         lastError: this.store.redact(error.message),
-        log: this.store.redact(error.message),
+        log: this.store.redact(
+          `${error.message}\n尚未确认真实构建结果，请核对 Jenkins 后重新查询；不会自动重复提交构建。`,
+        ),
       });
     }
   }
@@ -334,13 +393,23 @@ export class Deployments {
   }
   async refresh(id) {
     const record = this.store.deployment(id);
-    for (const service of record.services.filter(
-      (s) => s.status === "结果未知" && (s.queueUrl || s.buildUrl),
-    ))
-      this.saveService(id, service.serviceId, {
-        status: service.buildUrl ? "构建中" : "排队中",
-      });
-    await this.tick();
+    await Promise.all(
+      record.services
+        .filter(
+          (s) =>
+            (!terminal(s.status) || s.status === "结果未知") &&
+            (s.queueUrl || s.buildUrl),
+        )
+        .map(async (service) => {
+          const running = this.active.get(`${id}:${service.serviceId}`);
+          if (running) await running;
+          const latest = this.store
+            .deployment(id)
+            .services.find((s) => s.serviceId === service.serviceId);
+          if (terminal(latest.status) && latest.status !== "结果未知") return;
+          await this.pollService(id, service.serviceId, { ignoreTimeout: true });
+        }),
+    );
     return this.store.deployment(id);
   }
   async logs(id, serviceId) {
