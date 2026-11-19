@@ -85,10 +85,10 @@ type Dialog =
 const navigation = [
   { id: "overview", title: "项目概览", icon: LayoutDashboard },
   { id: "projects", title: "全部项目", icon: FolderGit2 },
+  { id: "environments", title: "环境连接", icon: Server },
   { id: "services", title: "服务管理", icon: Code2 },
   { id: "notes", title: "项目笔记", icon: FileText },
   { id: "versions", title: "版本管理", icon: Layers3 },
-  { id: "environments", title: "环境连接", icon: Server },
   { id: "deployments", title: "部署记录", icon: History },
   { id: "backups", title: "备份管理", icon: HardDrive },
   { id: "ai", title: "外部 AI 接入", icon: Braces },
@@ -1008,6 +1008,10 @@ export default function App() {
                 取消就绪
               </Button>
             )}
+            <Button variant="primary" onClick={() => openDeploy(release)}>
+              <Play size={15} />
+              发布
+            </Button>
           </div>
         </div>
         <section className="panel release-panel">
