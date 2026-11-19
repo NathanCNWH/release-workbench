@@ -33,6 +33,7 @@ import {
   Server,
   Settings2,
   ShieldCheck,
+  Trash2,
   Undo2,
   X,
 } from "lucide-react";
@@ -259,6 +260,42 @@ export default function App() {
       setReleases((previous) =>
         previous.map((item) => (item.id === release.id ? updater(item) : item)),
       );
+  }
+  function removeConfig(version: Release, target: ConfigFile) {
+    if (
+      !window.confirm(
+        `删除版本「${version.name}」中的配置「${target.name}」？\n仅移除此版本中的本地配置副本。`,
+      )
+    )
+      return;
+
+    void workbench
+      .update("releases", (versions) => {
+        const latest = versions.find((item) => item.id === version.id);
+        const latestConfig = latest?.configs.find(
+          (item) => item.id === target.id,
+        );
+        if (
+          latest?.status !== "草稿" ||
+          latest.name !== version.name ||
+          JSON.stringify(latestConfig) !== JSON.stringify(target)
+        ) {
+          throw new Error("版本或配置已更新，请核对后再删除。");
+        }
+
+        return versions.map((item) =>
+          item.id === latest.id
+            ? {
+                ...item,
+                configs: item.configs.filter((config) => config.id !== target.id),
+              }
+            : item,
+        );
+      })
+      .then(() => notify(`已删除配置「${target.name}」。`))
+      .catch(() => {
+        void workbench.refresh().catch(() => {});
+      });
   }
   function showDeployment(item: Deployment) {
     setDetailDeployment(item);
@@ -1379,6 +1416,16 @@ export default function App() {
                         >
                           编辑配置
                         </Button>
+                        {editable && (
+                          <Button
+                            variant="danger"
+                            disabled={workbench.pending > 0}
+                            onClick={() => removeConfig(release, config)}
+                          >
+                            <Trash2 size={15} />
+                            删除配置
+                          </Button>
+                        )}
                       </div>
                     </div>
                     <div className="script-description">
