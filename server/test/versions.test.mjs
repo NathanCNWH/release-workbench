@@ -48,7 +48,7 @@ test("configuration whitespace changes remain conflicts", async () => {
     await temp.clean();
   }
 });
-test("multi-version merge resolves conflicts, deduplicates SQL and freezes sources without changing originals", async () => {
+test("multi-version deployment freezes merged sources and publishes only linked versions on success", async () => {
   const temp = await temporary(),
     mock = await mockJenkins(),
     store = new Store(temp.path),
@@ -75,6 +75,7 @@ test("multi-version merge resolves conflicts, deduplicates SQL and freezes sourc
         ],
         configs: [config("f", "feature: true")],
       },
+      { ...first, id: "v3", name: "20261021-03" },
     ]);
     const before = store.get("releases").data;
     const input = {
@@ -125,11 +126,29 @@ test("multi-version merge resolves conflicts, deduplicates SQL and freezes sourc
     assert.throws(() => engine.run(plan.id), /重新预览/);
     engine.start();
     const finalPlan = engine.preview({ ...input, resolutions });
+    const beforePublish = store.get("releases");
     const record = engine.run(finalPlan.id);
+    assert.deepEqual(store.get("releases"), beforePublish);
     await until(() => store.deployment(record.id).status === "成功");
     const saved = store.deployment(record.id);
     assert.deepEqual(saved.versionIds, ["v1", "v2"]);
+    assert.deepEqual(saved.versionSnapshot.versions, beforePublish.data.slice(0, 2));
     assert.equal(saved.versionSnapshot.configs[0].content, "feature: true");
+    const published = store.get("releases");
+    assert.equal(published.revision, beforePublish.revision + 1);
+    assert.deepEqual(
+      published.data,
+      beforePublish.data.map((version) =>
+        saved.versionIds.includes(version.id)
+          ? { ...version, status: "已发布" }
+          : version,
+      ),
+    );
+    save(
+      store,
+      "releases",
+      published.data.map((version) => ({ ...version, status: "草稿" })),
+    );
     save(
       store,
       "releases",

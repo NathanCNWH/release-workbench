@@ -1477,6 +1477,14 @@ strong {
   padding-top: 10px;
   padding-bottom: 10px;
 }
+.version-status-select {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid #dce6dd;
+  border-radius: 6px;
+  background-color: #fff;
+  color: var(--ink);
+}
 .version-title {
   display: flex;
   gap: 12px;

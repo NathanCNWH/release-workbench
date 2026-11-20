@@ -39,6 +39,7 @@ export function Badge({
       {
         草稿: "gray",
         就绪: "green",
+        已发布: "blue",
         已归档: "gray",
         成功: "green",
         失败: "red",

@@ -91,7 +91,7 @@ const schemas = {
         projectId: id,
         name: required,
         title: required,
-        status: z.enum(["草稿", "就绪", "已归档"]),
+        status: z.enum(["草稿", "就绪", "已发布", "已归档"]),
         created: text,
         author: text,
         serviceIds: z.array(id).max(300).default([]),
@@ -359,10 +359,8 @@ export function validateCollection(store, name, input) {
         versionResourceKey(old) !== versionResourceKey(item)
       )
         throw new AppError(
-          "就绪或归档版本不能修改资源；就绪版本请先取消就绪，归档版本请复制为新版本",
+          "版本资料已锁定，不能修改资源。请先单独切换为草稿。",
         );
-      if (old?.status === "已归档" && item.status === "草稿")
-        throw new AppError("已归档版本不能退回草稿，请复制为新版本");
     }
   if (name === "environments")
     for (const e of data) {

@@ -38,6 +38,7 @@ import {
   X,
 } from "lucide-react";
 import { nextVersion, planSteps } from "./data";
+import { releaseStatuses } from "./types";
 import type {
   ConfigFile,
   Deployment,
@@ -409,7 +410,32 @@ export default function App() {
                   </button>
                 </td>
                 <td>
-                  <Badge>{item.status}</Badge>
+                  {compact ? (
+                    <Badge>{item.status}</Badge>
+                  ) : (
+                    <select
+                      className="version-status-select"
+                      aria-label={`${item.name} 版本状态`}
+                      value={item.status}
+                      disabled={!!workbench.pending}
+                      onChange={(event) => {
+                        const status = event.target.value as Release["status"];
+                        setReleases((previous) =>
+                          previous.map((version) =>
+                            version.id === item.id
+                              ? { ...version, status }
+                              : version,
+                          ),
+                        );
+                      }}
+                    >
+                      {releaseStatuses.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </td>
                 <td>
                   <div className="resource-counts">
@@ -920,7 +946,7 @@ export default function App() {
         <section className="panel">
           <div className="list-toolbar">
             <div className="filter-tabs">
-              {["全部", "草稿", "就绪", "已归档"].map((label) => (
+              {["全部", ...releaseStatuses].map((label) => (
                 <button
                   key={label}
                   className={versionFilter === label ? "active" : ""}
@@ -1175,7 +1201,9 @@ export default function App() {
                     ) : (
                       <CheckCircle2 size={15} />
                     )}
-                    {editable ? "草稿待标记就绪" : "版本已就绪"}
+                    {editable
+                      ? "草稿待标记就绪"
+                      : `版本状态为${release.status}`}
                   </span>
                 </div>
                 <div className="info-divider" />
@@ -1520,7 +1548,7 @@ export default function App() {
             <LockKeyhole size={14} />
             {release.status === "就绪"
               ? "版本资料已锁定，点击顶部“取消就绪”可恢复草稿并继续编辑。"
-              : "归档版本的资源已锁定。需要修改时，请复制为新的草稿版本。"}
+              : "版本资料已锁定。返回版本列表切换为草稿后即可编辑。"}
           </Note>
         )}
       </>

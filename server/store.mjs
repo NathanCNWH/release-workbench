@@ -188,6 +188,40 @@ export class Store {
     if (!row) throw new AppError("发布记录不存在", 404);
     return JSON.parse(row.data);
   }
+  updateDeployment(id, update) {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const previous = this.deployment(id);
+      const previousStatus = previous.status;
+      const record = update(previous);
+      this.record("deployments", id, record);
+
+      const versionIds =
+        record.versionIds ?? (record.versionId ? [record.versionId] : []);
+      if (
+        record.status === "成功" &&
+        previousStatus !== "成功" &&
+        versionIds.length
+      ) {
+        const ids = new Set(versionIds);
+        const releases = this.get("releases");
+        const shouldPublish = (version) =>
+          version.projectId === record.projectId &&
+          ids.has(version.id) &&
+          version.status !== "已发布";
+        if (releases.data.some(shouldPublish)) {
+          const data = releases.data.map((version) =>
+            shouldPublish(version) ? { ...version, status: "已发布" } : version,
+          );
+          this.save("releases", data, releases.revision);
+        }
+      }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
   createPlan(plan) {
     this.db
       .prepare("INSERT INTO plans VALUES(?,?,NULL)")

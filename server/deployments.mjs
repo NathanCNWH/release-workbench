@@ -226,11 +226,12 @@ export class Deployments {
     await Promise.all(tasks);
   }
   saveService(id, serviceId, update) {
-    const record = this.store.deployment(id);
-    record.services = record.services.map((s) =>
-      s.serviceId === serviceId ? { ...s, ...update } : s,
-    );
-    this.store.record("deployments", id, this.aggregate(record));
+    this.store.updateDeployment(id, (record) => {
+      record.services = record.services.map((s) =>
+        s.serviceId === serviceId ? { ...s, ...update } : s,
+      );
+      return this.aggregate(record);
+    });
   }
   async advance(id, serviceId, { ignoreTimeout = false } = {}) {
     const record = this.store.deployment(id),

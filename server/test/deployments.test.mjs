@@ -12,6 +12,7 @@ test("restart resumes a known queue without re-triggering; cancelled and rejecte
   let engine = new Deployments(store, { pollMs: 5000 });
   try {
     seed(store, mock.base);
+    const releases = store.get("releases");
     const first = engine.run(
       engine.preview({
         projectId: "p1",
@@ -25,6 +26,7 @@ test("restart resumes a known queue without re-triggering; cancelled and rejecte
     engine = new Deployments(store, { pollMs: 20 });
     engine.start();
     await until(() => store.deployment(first.id).status === "成功");
+    assert.deepEqual(store.get("releases"), releases);
     assert.equal(mock.triggers.length, 1);
     mock.setCancelled(true);
     const second = engine.run(
@@ -63,6 +65,7 @@ test("selected services, branch parameters, idempotency, version association and
     engine = new Deployments(store, { pollMs: 20 });
   try {
     seed(store, mock.base);
+    const releases = store.get("releases");
     engine.start();
     for (const selections of [[null], [{ serviceId: "s1", branch: 42 }]]) {
       assert.throws(
@@ -86,6 +89,7 @@ test("selected services, branch parameters, idempotency, version association and
     });
     assert.equal(complete.status, "部分失败");
     assert.equal(complete.versionId, "v1");
+    assert.deepEqual(store.get("releases"), releases);
     assert.equal(mock.triggers.length, 2);
     assert.equal(
       new URLSearchParams(mock.triggers[0].body).get("git_branch"),

@@ -5,7 +5,7 @@ import { recordOperation } from "../records.mjs";
 import { Deployments } from "../deployments.mjs";
 import { temporary, seed, save, mockJenkins, until } from "./helpers.mjs";
 
-test("cancel readiness unlocks the original version without rewriting published snapshots or accepting stale previews", async () => {
+test("locked versions can return to draft and published snapshots stay intact", async () => {
   const temp = await temporary(),
     mock = await mockJenkins(),
     store = new Store(temp.path),
@@ -62,15 +62,20 @@ test("cancel readiness unlocks the original version without rewriting published 
     engine.start();
     const deployed = engine.run(engine.preview(input).id);
     await until(() => store.deployment(deployed.id).status === "成功");
+    assert.equal(store.get("releases").data[0].status, "已发布");
     const snapshot = JSON.stringify(
       store.deployment(deployed.id).versionSnapshot,
     );
-    const stalePlan = engine.preview(input);
     assert.throws(
       () => update({ status: "草稿", serviceIds: ["s2"] }),
       /不能.*修改资源/,
     );
-    assert.equal(store.get("releases").data[0].status, "就绪");
+    assert.equal(store.get("releases").data[0].status, "已发布");
+    assert.equal(update({ status: "就绪" }).record.status, "就绪");
+    const manuallyUpdated = store.get("releases");
+    await engine.refresh(deployed.id);
+    assert.deepEqual(store.get("releases"), manuallyUpdated);
+    const stalePlan = engine.preview(input);
     assert.equal(update({ status: "草稿" }).record.status, "草稿");
     assert.throws(() => engine.run(stalePlan.id), /重新预览/);
     update({ serviceIds: ["s2"], title: "重新编辑的版本" });
@@ -97,8 +102,8 @@ test("cancel readiness unlocks the original version without rewriting published 
     );
     assert.equal(mock.triggers.length, 1);
     update({ status: "就绪" });
-    update({ status: "已归档" });
-    assert.throws(() => update({ status: "草稿" }), /已归档版本不能退回草稿/);
+    assert.equal(update({ status: "已归档" }).record.status, "已归档");
+    assert.equal(update({ status: "草稿" }).record.status, "草稿");
   } finally {
     engine.stop();
     await until(() => !engine.active.size);
