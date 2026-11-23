@@ -113,6 +113,21 @@ const stamp = () =>
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date());
+function releaseCreatedAt({ created, id }: Release) {
+  const isLocalTime = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(created);
+  const timestamp = Date.parse(
+    isLocalTime ? `${created.replace(" ", "T")}+08:00` : created,
+  );
+  if (Number.isNaN(timestamp)) return Number.MIN_SAFE_INTEGER;
+  if (isLocalTime) {
+    // Browser-created IDs retain the milliseconds omitted by stamp().
+    const idTimestamp = Number(/^release-(\d+)-/.exec(id)?.[1]);
+    if (idTimestamp >= timestamp && idTimestamp < timestamp + 60_000) {
+      return idTimestamp;
+    }
+  }
+  return timestamp;
+}
 
 async function importText(
   event: React.ChangeEvent<HTMLInputElement>,
@@ -925,11 +940,13 @@ export default function App() {
 
   function renderVersions() {
     if (versionOpen && release) return renderReleaseDetail();
-    const filtered = projectReleases.filter(
-      (item) =>
-        (versionFilter === "全部" || item.status === versionFilter) &&
-        (!query || (item.name + item.title).includes(query)),
-    );
+    const filtered = projectReleases
+      .filter(
+        (item) =>
+          (versionFilter === "全部" || item.status === versionFilter) &&
+          (!query || (item.name + item.title).includes(query)),
+      )
+      .sort((a, b) => releaseCreatedAt(b) - releaseCreatedAt(a));
     return (
       <>
         <div className="page-heading">
