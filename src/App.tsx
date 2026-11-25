@@ -502,13 +502,27 @@ export default function App() {
                   <small>{item.author}</small>
                 </td>
                 <td>
-                  <button
-                    className="text-button"
-                    onClick={() => openRelease(item.id)}
-                  >
-                    查看版本
-                    <ChevronRight size={14} />
-                  </button>
+                  <div className="version-row-actions">
+                    <button
+                      className="text-button"
+                      onClick={() => openRelease(item.id)}
+                    >
+                      查看版本
+                      <ChevronRight size={14} />
+                    </button>
+                    {!compact && (
+                      <button
+                        type="button"
+                        className="text-button"
+                        aria-label={`隐藏版本 ${item.name}`}
+                        disabled={!!workbench.pending}
+                        onClick={() => hideRelease(item)}
+                      >
+                        <EyeOff size={14} />
+                        隐藏
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
