@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { AppError } from "./store.mjs";
-import { parse, releaseBranch } from "./validation.mjs";
+import { gitBranchName, parse, releaseBranchDate } from "./validation.mjs";
 
 const execute = promisify(execFile);
 const gitEnv = {
@@ -28,7 +28,7 @@ for (const key of [
 
 const inputSchema = z.object({
   projectId: z.string().min(1),
-  branchName: releaseBranch,
+  branchName: gitBranchName,
   serviceIds: z.array(z.string().min(1)).min(1, "请选择涉及服务").max(300),
 });
 const masterRef = "refs/heads/master";
@@ -93,16 +93,19 @@ async function inspectRepository(target, branchName, cutoff, requestSignal) {
     const [masterOnly, branchOnly] = (
       await git("rev-list", "--left-right", "--count", `${localMaster}...${localBranch}`)
     ).split(/\s+/).map(Number);
-    const history = await git("rev-list", "--timestamp", `${localMaster}..${localBranch}`);
-    const early = history
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .map((line) => {
-        const [timestamp, id] = line.split(" ");
-        return { id, timestamp: Number(timestamp) };
-      })
-      .filter((commit) => commit.timestamp < cutoff)
-      .sort((a, b) => a.timestamp - b.timestamp);
+    let early = [];
+    if (cutoff !== null) {
+      const history = await git("rev-list", "--timestamp", `${localMaster}..${localBranch}`);
+      early = history
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .map((line) => {
+          const [timestamp, id] = line.split(" ");
+          return { id, timestamp: Number(timestamp) };
+        })
+        .filter((commit) => commit.timestamp < cutoff)
+        .sort((a, b) => a.timestamp - b.timestamp);
+    }
     return {
       ...target,
       kind: "compared",
@@ -141,9 +144,8 @@ export async function checkVersionBranches(store, input, signal) {
     group.services.push(service.name);
     repositories.set(service.repository, group);
   }
-  const day = branchName.slice("feature/zy_".length, "feature/zy_".length + 8);
-  const branchDate = `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6)}`;
-  const cutoff = Date.parse(`${branchDate}T00:00:00+08:00`) / 1000;
+  const branchDate = releaseBranchDate(branchName);
+  const cutoff = branchDate ? Date.parse(`${branchDate}T00:00:00+08:00`) / 1000 : null;
   const deadline = AbortSignal.any([signal, AbortSignal.timeout(90000)]);
   const repositoriesToCheck = [...repositories.values()];
   const results = [];

@@ -48,24 +48,44 @@ const binding = z.object({
   branches: z.array(required).max(2000),
   defaultBranch: text,
 });
-export const releaseBranch = required.refine((branch) => {
-  const match = /^feature\/zy_(\d{4})(\d{2})(\d{2})_(.+)$/u.exec(branch);
-  if (!match) return false;
-  const [, year, month, day] = match;
-  const calendarDate = `${year}-${month}-${day}`;
-  const date = new Date(`${calendarDate}T00:00:00Z`);
-  return (
-    Number.isFinite(date.getTime()) &&
-    date.toISOString().slice(0, 10) === calendarDate &&
+export const gitBranchName = required.refine(
+  (branch) =>
+    branch !== "HEAD" &&
+    !branch.startsWith("-") &&
     !/[\u0000-\u0020\u007f~^:?*\[\\]/u.test(branch) &&
     !branch.includes("..") &&
     !branch.includes("@{") &&
     !branch.endsWith(".") &&
     branch.split("/").every(
       (part) => part && !part.startsWith(".") && !part.endsWith(".lock"),
-    )
-  );
-}, "分支名须符合 feature/zy_yyyyMMdd_{功能} 及 Git 分支命名规则");
+    ),
+  "请输入合法的 Git 分支名。",
+);
+
+function calendarDate(day) {
+  const value = `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6)}`;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) &&
+    date.toISOString().slice(0, 10) === value
+    ? value
+    : null;
+}
+
+function defaultBranchDate(branch) {
+  const match = /^feature\/zy_(\d{8})_.+$/u.exec(branch);
+  return match ? calendarDate(match[1]) : null;
+}
+
+export function releaseBranchDate(branch) {
+  const generatedDate = defaultBranchDate(branch);
+  if (generatedDate) return generatedDate;
+  const dates = new Set();
+  for (const [day] of branch.matchAll(/(?<!\d)\d{8}(?!\d)/g)) {
+    const date = calendarDate(day);
+    if (date) dates.add(date);
+  }
+  return dates.size === 1 ? dates.values().next().value : null;
+}
 const versionResourceKey = (version) =>
   JSON.stringify(
     {
@@ -114,7 +134,7 @@ const schemas = {
         projectId: id,
         name: required,
         title: required,
-        branchName: releaseBranch.optional(),
+        branchName: gitBranchName.optional(),
         status: z.enum(["草稿", "就绪", "已发布", "已归档"]),
         hidden: z.boolean().optional(),
         created: text,
@@ -365,11 +385,12 @@ export function validateCollection(store, name, input) {
   if (name === "releases") {
     const savedVersions = store.get(name).data;
     const savedById = new Map(savedVersions.map((item) => [item.id, item]));
-    const branchesByName = new Map(
+    const savedBranchesByName = new Map(
       savedVersions
         .filter((item) => item.branchName)
         .map((item) => [item.name, item.branchName]),
     );
+    const branchesByName = new Map(savedBranchesByName);
     for (const item of data) {
       if (!item.branchName) continue;
       const registeredBranch = branchesByName.get(item.name);
@@ -383,7 +404,10 @@ export function validateCollection(store, name, input) {
       const old = savedById.get(item.id);
       if (!old) {
         item.branchName ??= branchesByName.get(item.name);
-        if (!item.branchName)
+        if (
+          !item.branchName ||
+          (!savedBranchesByName.has(item.name) && !defaultBranchDate(item.branchName))
+        )
           throw new AppError(
             `首次创建版本「${item.name}」时，须登记 feature/zy_yyyyMMdd_{功能} 分支名。`,
           );

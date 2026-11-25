@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import { z } from "zod";
 import { AppError } from "./store.mjs";
-import { parse, releaseBranch } from "./validation.mjs";
+import { gitBranchName, parse } from "./validation.mjs";
 
 const normalize = (text) => text.replace(/\r\n/g, "\n").trim();
 const hash = (text) => createHash("sha256").update(text).digest("hex");
@@ -11,7 +11,7 @@ const versionEdit = z.object({
   versionId: z.string(),
   revision: z.number().int().nonnegative(),
   title: z.string().trim().min(1).max(160),
-  branchName: releaseBranch.optional(),
+  branchName: gitBranchName.optional(),
   confirmed: z.boolean().optional(),
 });
 

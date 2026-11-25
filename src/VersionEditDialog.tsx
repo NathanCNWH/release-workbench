@@ -83,7 +83,7 @@ export default function VersionEditDialog({
               hint={
                 changesOtherProjects
                   ? `将同步到 ${otherProjects.join("、")}`
-                  : "feature/zy_yyyyMMdd_{功能}"
+                  : undefined
               }
             >
               <input

@@ -15,7 +15,7 @@ type RepositoryCheck = { repository: string; services: string[] } & (
     }
 );
 
-type BranchCheck = { branchDate: string; results: RepositoryCheck[] };
+type BranchCheck = { branchDate: string | null; results: RepositoryCheck[] };
 type CheckState = { scope: string } & (
   | { state: "checking" }
   | { state: "result"; value: BranchCheck }
@@ -28,7 +28,13 @@ const beijingTime = new Intl.DateTimeFormat("sv-SE", {
   timeStyle: "short",
 });
 
-function RepositoryResult({ result }: { result: RepositoryCheck }) {
+function RepositoryResult({
+  result,
+  hasBranchDate,
+}: {
+  result: RepositoryCheck;
+  hasBranchDate: boolean;
+}) {
   return (
     <li className="branch-check-repository">
       <strong>{result.services.join("、")}</strong>
@@ -50,7 +56,7 @@ function RepositoryResult({ result }: { result: RepositoryCheck }) {
           <div className="branch-check-status">
             {!result.commonAncestors.length && <Badge tone="orange">无共同祖先</Badge>}
             {result.earlyCount > 0 && <Badge tone="orange">需核对</Badge>}
-            {!!result.commonAncestors.length && !result.earlyCount && (
+            {hasBranchDate && !!result.commonAncestors.length && !result.earlyCount && (
               <Badge tone="green">未发现较早独有提交</Badge>
             )}
             <span>仅 master {result.masterOnly} 条</span>
@@ -155,10 +161,18 @@ export default function VersionBranchField({
         )}
         {current?.state === "result" && (
           <div className="branch-check-results">
-            <small>较早提交以 {current.value.branchDate} 北京时间零点为界。</small>
+            <small>
+              {current.value.branchDate
+                ? `较早提交以 ${current.value.branchDate} 北京时间零点为界。`
+                : "分支名中未识别到明确日期，仅显示分支状态和提交差异。"}
+            </small>
             <ul>
               {current.value.results.map((result) => (
-                <RepositoryResult key={result.repository} result={result} />
+                <RepositoryResult
+                  key={result.repository}
+                  result={result}
+                  hasBranchDate={!!current.value.branchDate}
+                />
               ))}
             </ul>
           </div>
