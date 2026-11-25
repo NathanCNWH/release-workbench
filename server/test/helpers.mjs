@@ -102,6 +102,7 @@ export function seed(store, base) {
       projectId: "p1",
       name: "20261020-01",
       title: "测试版本",
+      branchName: "feature/zy_20261020_fixture",
       status: "草稿",
       created: new Date().toISOString(),
       author: "测试",

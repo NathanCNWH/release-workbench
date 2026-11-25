@@ -135,7 +135,7 @@ const schemas = {
         name: required,
         title: required,
         branchName: gitBranchName.optional(),
-        status: z.enum(["草稿", "就绪", "已发布", "已归档"]),
+        status: z.enum(["草稿", "就绪", "测试中", "已发布", "已归档"]),
         hidden: z.boolean().optional(),
         created: text,
         author: text,

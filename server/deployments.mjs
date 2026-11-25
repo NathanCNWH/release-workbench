@@ -165,10 +165,18 @@ export class Deployments {
           "所选 Jenkins 任务仍有未完成发布，请查看记录后再操作。",
           409,
         );
+      const environmentType = this.store
+        .get("environments")
+        .data.find(
+          (environment) =>
+            environment.id === plan.environmentId &&
+            environment.projectId === plan.projectId,
+        )?.type;
       return {
         id: `DEP-${randomUUID()}`,
         projectId: plan.projectId,
         environmentId: plan.environmentId,
+        environmentType,
         versionId: plan.versionId,
         versionIds: plan.versionIds,
         versionSnapshot: plan.versionSnapshot,

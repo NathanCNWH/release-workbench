@@ -26,6 +26,11 @@ export const collections = [
   "jenkinsProfiles",
   "projectNotes",
 ];
+const versionStatusByEnvironment = new Map([
+  ["测试", "测试中"],
+  ["生产", "已发布"],
+]);
+
 export class AppError extends Error {
   constructor(message, status = 400) {
     super(message);
@@ -203,17 +208,27 @@ export class Store {
         previousStatus !== "成功" &&
         versionIds.length
       ) {
-        const ids = new Set(versionIds);
-        const releases = this.get("releases");
-        const shouldPublish = (version) =>
-          version.projectId === record.projectId &&
-          ids.has(version.id) &&
-          version.status !== "已发布";
-        if (releases.data.some(shouldPublish)) {
-          const data = releases.data.map((version) =>
-            shouldPublish(version) ? { ...version, status: "已发布" } : version,
-          );
-          this.save("releases", data, releases.revision);
+        const environmentType =
+          record.environmentType ??
+          this.get("environments").data.find(
+            (environment) =>
+              environment.id === record.environmentId &&
+              environment.projectId === record.projectId,
+          )?.type;
+        const nextStatus = versionStatusByEnvironment.get(environmentType);
+        if (nextStatus) {
+          const ids = new Set(versionIds);
+          const releases = this.get("releases");
+          const shouldUpdate = (version) =>
+            version.projectId === record.projectId &&
+            ids.has(version.id) &&
+            version.status !== nextStatus;
+          if (releases.data.some(shouldUpdate)) {
+            const data = releases.data.map((version) =>
+              shouldUpdate(version) ? { ...version, status: nextStatus } : version,
+            );
+            this.save("releases", data, releases.revision);
+          }
         }
       }
       this.db.exec("COMMIT");

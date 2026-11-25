@@ -5,13 +5,18 @@ import { recordOperation } from "../records.mjs";
 import { Deployments } from "../deployments.mjs";
 import { temporary, seed, save, mockJenkins, until } from "./helpers.mjs";
 
-test("locked versions can return to draft and published snapshots stay intact", async () => {
+test("successful deployments set the environment's version status and preserve snapshots", async () => {
   const temp = await temporary(),
     mock = await mockJenkins(),
     store = new Store(temp.path),
     engine = new Deployments(store, { pollMs: 20 });
   try {
     seed(store, mock.base);
+    const [testEnvironment] = store.get("environments").data;
+    save(store, "environments", [
+      testEnvironment,
+      { ...testEnvironment, id: "e2", key: "prod", name: "生产环境", type: "生产" },
+    ]);
     save(
       store,
       "releases",
@@ -60,9 +65,14 @@ test("locked versions can return to draft and published snapshots stay intact", 
       selections: [{ serviceId: "s1" }],
     };
     engine.start();
+    const production = engine.run(
+      engine.preview({ ...input, environmentId: "e2" }).id,
+    );
+    await until(() => store.deployment(production.id).status === "成功");
+    assert.equal(store.get("releases").data[0].status, "已发布");
     const deployed = engine.run(engine.preview(input).id);
     await until(() => store.deployment(deployed.id).status === "成功");
-    assert.equal(store.get("releases").data[0].status, "已发布");
+    assert.equal(store.get("releases").data[0].status, "测试中");
     const snapshot = JSON.stringify(
       store.deployment(deployed.id).versionSnapshot,
     );
@@ -70,7 +80,7 @@ test("locked versions can return to draft and published snapshots stay intact", 
       () => update({ status: "草稿", serviceIds: ["s2"] }),
       /不能.*修改资源/,
     );
-    assert.equal(store.get("releases").data[0].status, "已发布");
+    assert.equal(store.get("releases").data[0].status, "测试中");
     assert.equal(update({ status: "就绪" }).record.status, "就绪");
     const manuallyUpdated = store.get("releases");
     await engine.refresh(deployed.id);
@@ -100,7 +110,7 @@ test("locked versions can return to draft and published snapshots stay intact", 
       JSON.stringify(store.deployment(deployed.id).versionSnapshot),
       snapshot,
     );
-    assert.equal(mock.triggers.length, 1);
+    assert.equal(mock.triggers.length, 2);
     update({ status: "就绪" });
     assert.equal(update({ status: "已归档" }).record.status, "已归档");
     assert.equal(update({ status: "草稿" }).record.status, "草稿");

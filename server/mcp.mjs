@@ -148,7 +148,7 @@ tool(
 );
 tool(
   "record_update",
-  "按 data 中的字段部分更新业务资料，revision 使用最近查询值。版本状态可单独切换为草稿、就绪、已发布或已归档。编辑版本资源前先将状态切为草稿。保留 environment 中不变的 servers/bindings 内容后再提交这两个数组。",
+  "按 data 中的字段部分更新业务资料，revision 使用最近查询值。版本状态可单独切换为草稿、就绪、测试中、已发布或已归档。编辑版本资源前先将状态切为草稿。保留 environment 中不变的 servers/bindings 内容后再提交这两个数组。",
   {
     ...scope,
     recordId: z.string(),

@@ -9,7 +9,7 @@ export type Page =
   | "deployments"
   | "backups"
   | "ai";
-export const releaseStatuses = ["草稿", "就绪", "已发布", "已归档"] as const;
+export const releaseStatuses = ["草稿", "就绪", "测试中", "已发布", "已归档"] as const;
 export type ReleaseStatus = (typeof releaseStatuses)[number];
 export interface ProjectNote {
   id: string;
@@ -161,6 +161,7 @@ export interface Deployment {
   id: string;
   projectId: string;
   environmentId: string;
+  environmentType?: string;
   status: BuildStatus;
   started: string;
   duration: string;
