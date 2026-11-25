@@ -16,7 +16,8 @@ import { Deployments } from "./deployments.mjs";
 import { Backups } from "./backups.mjs";
 import { checkMysql, checkSsh } from "./connections.mjs";
 import { acquireLock } from "./lock.mjs";
-import { mergeVersions } from "./versions.mjs";
+import { editVersion, mergeVersions } from "./versions.mjs";
+import { checkVersionBranches } from "./git-branches.mjs";
 import { recordOperation } from "./records.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -128,6 +129,17 @@ export async function createApp({
         );
       if (req.method === "POST" && path === "/api/versions/merge")
         return json(res, 200, mergeVersions(store, await body(req)));
+      if (req.method === "POST" && path === "/api/versions/edit")
+        return json(res, 200, editVersion(store, await body(req)));
+      if (req.method === "POST" && path === "/api/versions/check-branch") {
+        const input = await body(req);
+        if (res.destroyed) return;
+        const controller = new AbortController();
+        res.once("close", () => controller.abort());
+        const result = await checkVersionBranches(store, input, controller.signal);
+        if (!res.destroyed) json(res, 200, result);
+        return;
+      }
       if (req.method === "GET" && path === "/api/info")
         return json(res, 200, {
           dataDirectory: store.directory,

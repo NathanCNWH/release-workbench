@@ -1,9 +1,51 @@
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
+import { z } from "zod";
 import { AppError } from "./store.mjs";
+import { parse, releaseBranch } from "./validation.mjs";
 
 const normalize = (text) => text.replace(/\r\n/g, "\n").trim();
 const hash = (text) => createHash("sha256").update(text).digest("hex");
+const versionEdit = z.object({
+  projectId: z.string(),
+  versionId: z.string(),
+  revision: z.number().int().nonnegative(),
+  title: z.string().trim().min(1).max(160),
+  branchName: releaseBranch.optional(),
+  confirmed: z.boolean().optional(),
+});
+
+export function editVersion(store, input) {
+  const edit = parse(versionEdit, input);
+  const { data, revision } = store.get("releases");
+  if (revision !== edit.revision)
+    throw new AppError(
+      "版本资料已在其他窗口更新，请重新打开编辑后再保存。",
+      409,
+    );
+  const target = data.find(
+    (item) => item.id === edit.versionId && item.projectId === edit.projectId,
+  );
+  if (!target || target.hidden)
+    throw new AppError("当前项目的版本不存在。", 404);
+  if (target.status !== "草稿") throw new AppError("请先将版本切换为草稿。");
+
+  const related = data.filter((item) => item.name === target.name);
+  const registered = related.find((item) => item.branchName)?.branchName;
+  const branchName = edit.branchName ?? registered;
+  const renamed = registered && branchName !== registered;
+  if (renamed && related.length > 1 && edit.confirmed !== true)
+    throw new AppError("请确认同步其他项目的同版本号分支名。");
+
+  const updated = data.map((item) => {
+    if (item.id === target.id) return { ...item, title: edit.title, branchName };
+    if (renamed && item.name === target.name) return { ...item, branchName };
+    return item;
+  });
+  const saved = store.save("releases", updated, edit.revision);
+  return { versionId: target.id, revision: saved.revision };
+}
+
 export function mergeVersions(store, input) {
   if (
     !input ||

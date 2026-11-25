@@ -28,6 +28,7 @@ import {
   LockKeyhole,
   Menu,
   Package,
+  Pencil,
   Play,
   Plus,
   Search,
@@ -70,13 +71,16 @@ import BackupsPage from "./BackupsPage";
 import AIConnectionInfo from "./AIConnectionInfo";
 import ProjectSwitcher from "./ProjectSwitcher";
 import ProjectNotes from "./ProjectNotes";
+import VersionBranchField from "./VersionBranchField";
+import VersionEditDialog from "./VersionEditDialog";
 import VersionServices, { VersionServiceEditor } from "./VersionServices";
 import { useCollection, useWorkbench } from "./state";
-import { api } from "./api";
+import { api, post } from "./api";
 
 type Dialog =
   | "project"
   | "version"
+  | "version-edit"
   | "sql"
   | "config"
   | "environment"
@@ -184,6 +188,12 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [editingVersion, setEditingVersion] = useState<{
+    release: Release;
+    revision: number;
+    registeredBranch?: string;
+    otherProjects: string[];
+  } | null>(null);
   const [editingScript, setEditingScript] = useState<SqlScript | null>(null);
   const [editingConfig, setEditingConfig] = useState<ConfigFile | null>(null);
   const [detailDeployment, setDetailDeployment] = useState<Deployment | null>(
@@ -293,6 +303,18 @@ export default function App() {
     setVersionName(nextVersion(releases, projectId));
     setVersionFeature("");
     setDialog("version");
+  }
+  function openVersionEdit(version: Release) {
+    const related = releases.filter((item) => item.name === version.name);
+    setEditingVersion({
+      release: version,
+      revision: workbench.state.releases.revision,
+      registeredBranch: related.find((item) => item.branchName)?.branchName,
+      otherProjects: related
+        .filter((item) => item.projectId !== version.projectId)
+        .map((item) => projects.find((project) => project.id === item.projectId)?.name ?? item.projectId),
+    });
+    setDialog("version-edit");
   }
   function updateRelease(updater: (current: Release) => Release) {
     if (release)
@@ -1108,6 +1130,10 @@ export default function App() {
               </span>
               <span>创建人：{release.author}</span>
               <span>{project.name}</span>
+              <span className="release-branch">
+                <GitBranch size={13} />
+                {release.branchName ? <code>{release.branchName}</code> : "分支未登记"}
+              </span>
             </div>
           </div>
           <div className="actions">
@@ -1128,6 +1154,15 @@ export default function App() {
               <ArrowDownToLine size={15} />
               导出清单
             </Button>
+            {editable && (
+              <Button
+                disabled={!!workbench.pending}
+                onClick={() => openVersionEdit(release)}
+              >
+                <Pencil size={15} />
+                编辑版本
+              </Button>
+            )}
             {editable ? (
               <Button
                 onClick={() => {
@@ -2430,20 +2465,26 @@ export default function App() {
                   />
                 </Field>
               )}
-              <Field
-                label="分支"
-                hint={
-                  registeredVersionBranch
-                    ? "自动沿用已登记的同版本分支。"
-                    : undefined
-                }
+              <VersionBranchField
+                projectId={projectId}
+                branchName={versionBranchPreview}
+                serviceIds={versionServiceIds}
               >
-                <input
-                  value={versionBranchPreview}
-                  placeholder="填写功能标识后生成"
-                  readOnly
-                />
-              </Field>
+                <Field
+                  label="分支名"
+                  hint={
+                    registeredVersionBranch
+                      ? "自动沿用已登记的同版本分支。"
+                      : undefined
+                  }
+                >
+                  <input
+                    value={versionBranchPreview}
+                    placeholder="填写功能标识后生成"
+                    readOnly
+                  />
+                </Field>
+              </VersionBranchField>
               <Field label="发布内容" required>
                 <input
                   name="title"
@@ -2496,6 +2537,26 @@ export default function App() {
             </div>
           </form>
         </Modal>
+      )}
+
+      {dialog === "version-edit" && editingVersion && (
+        <VersionEditDialog
+          release={editingVersion.release}
+          registeredBranch={editingVersion.registeredBranch}
+          otherProjects={editingVersion.otherProjects}
+          onClose={closeDialog}
+          onSave={async (values) => {
+            await post("/versions/edit", {
+              projectId: editingVersion.release.projectId,
+              versionId: editingVersion.release.id,
+              revision: editingVersion.revision,
+              ...values,
+            });
+            await workbench.refresh().catch(() => {});
+            closeDialog();
+            notify("已保存版本信息。");
+          }}
+        />
       )}
 
       {dialog === "sql" && release && (

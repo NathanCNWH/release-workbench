@@ -48,7 +48,7 @@ const binding = z.object({
   branches: z.array(required).max(2000),
   defaultBranch: text,
 });
-const releaseBranch = required.refine((branch) => {
+export const releaseBranch = required.refine((branch) => {
   const match = /^feature\/zy_(\d{4})(\d{2})(\d{2})_(.+)$/u.exec(branch);
   if (!match) return false;
   const [, year, month, day] = match;
@@ -388,7 +388,7 @@ export function validateCollection(store, name, input) {
             `首次创建版本「${item.name}」时，须登记 feature/zy_yyyyMMdd_{功能} 分支名。`,
           );
       } else if (old.branchName !== item.branchName)
-        throw new AppError(`版本「${item.name}」的分支创建后不能修改。`);
+        throw new AppError(`请通过「编辑版本」修改版本「${item.name}」的分支名。`);
       item.components = []; // Actual service scope belongs exclusively to deployment snapshots.
       unique(item.serviceIds, (value) => value, "版本涉及服务不能重复");
       if (

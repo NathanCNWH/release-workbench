@@ -1696,6 +1696,13 @@ strong {
   gap: 5px;
   align-items: center;
 }
+.release-branch {
+  min-width: 0;
+}
+.release-branch code {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
 .tabs {
   display: flex;
   align-items: stretch;
@@ -2886,6 +2893,63 @@ strong {
 }
 .modal-body > .field:last-child {
   margin-bottom: 0;
+}
+.version-branch-field {
+  margin-bottom: 18px;
+}
+.modal-body > .version-branch-field:last-child {
+  margin-bottom: 0;
+}
+.branch-check-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+.branch-check-controls > .button {
+  min-height: 42px;
+  margin-top: 27px;
+}
+.branch-check-results {
+  margin-top: 12px;
+  color: var(--ink);
+}
+.branch-check-results > ul {
+  padding: 0;
+  margin: 6px 0 0;
+  list-style: none;
+}
+.branch-check-repository {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.branch-check-address {
+  display: block;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.branch-check-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 5px;
+  font-size: 12px;
+}
+.branch-check-evidence {
+  margin-top: 5px;
+  font-size: 12px;
+}
+.branch-check-evidence > summary {
+  color: var(--green-dark);
+  cursor: pointer;
+}
+.branch-check-evidence ul {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+.branch-check-evidence time {
+  margin-left: 10px;
 }
 .modal-body > .form-grid {
   margin-bottom: 20px;
