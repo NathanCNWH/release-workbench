@@ -94,6 +94,7 @@ export interface Release {
   name: string;
   title: string;
   status: ReleaseStatus;
+  branchName?: string;
   hidden?: boolean;
   created: string;
   author: string;

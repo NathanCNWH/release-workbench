@@ -137,11 +137,11 @@ tool(
 const data = z
   .record(z.unknown())
   .describe(
-    "业务字段。project: name,key,description,color；service: name,kind(后端服务/前端应用),repository,defaultBranch；environment: name,key,type,servers,bindings,deployPath,backupPath,dbHost,dbPort,database,dbUser,configPath；version: name,title,status,author,serviceIds(可选的项目服务ID数组，记录涉及范围，不代表实际发布)；sql: name,database,order,kind,description,sql,previousSql；config: name,path,format,content,previousContent。主机和服务关联用 bindings[].serverIds；SSH 环境变量模式无需 username。不接收密码；ID 自动生成。",
+    "业务字段。project: name,key,description,color；service: name,kind(后端服务/前端应用),repository,defaultBranch；environment: name,key,type,servers,bindings,deployPath,backupPath,dbHost,dbPort,database,dbUser,configPath；version: name,title,branchName,status,author,serviceIds(可选的项目服务ID数组，记录涉及范围，不代表实际发布)；sql: name,database,order,kind,description,sql,previousSql；config: name,path,format,content,previousContent。主机和服务关联用 bindings[].serverIds；SSH 环境变量模式无需 username。不接收密码；ID 自动生成。",
   );
 tool(
   "record_create",
-  "新增业务资料，先 records_list 获取当前 revision。SQL/配置仅保存文本，绝不执行。完整字段见 data 说明。",
+  "新增业务资料，先 records_list 获取当前 revision。首次创建某个版本号时，data.branchName 须符合 feature/zy_yyyyMMdd_{功能}；其他项目创建同版本号时可省略并沿用已登记分支。SQL/配置仅保存文本。完整字段见 data 说明。",
   { ...scope, revision: z.number().int().nonnegative(), data },
   (args) => call("/records/create", args),
   false,

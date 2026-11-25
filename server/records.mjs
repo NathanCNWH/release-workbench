@@ -19,7 +19,7 @@ const fields = {
     "dbUser",
     "configPath",
   ],
-  version: ["name", "title", "status", "author", "serviceIds"],
+  version: ["name", "title", "branchName", "status", "author", "serviceIds"],
   sql: [
     "name",
     "database",

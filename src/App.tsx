@@ -114,6 +114,11 @@ const stamp = () =>
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date());
+function versionBranchName(created: string, featureInput: string) {
+  const feature = featureInput.trim();
+  const day = created.slice(0, 10).replaceAll("-", "");
+  return feature ? `feature/zy_${day}_${feature}` : "";
+}
 function releaseCreatedAt({ created, id }: Release) {
   const isLocalTime = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(created);
   const timestamp = Date.parse(
@@ -191,6 +196,8 @@ export default function App() {
   const [includeConfigs, setIncludeConfigs] = useState(true);
   const [includeEnvironment, setIncludeEnvironment] = useState(true);
   const [recordFilter, setRecordFilter] = useState("全部");
+  const [versionName, setVersionName] = useState("");
+  const [versionFeature, setVersionFeature] = useState("");
   const [versionServiceIds, setVersionServiceIds] = useState<string[]>([]);
   useEffect(() => {
     setVersionServiceIds([]);
@@ -211,6 +218,15 @@ export default function App() {
   const projectReleases = visibleReleases.filter(
     (item) => item.projectId === projectId,
   );
+  const registeredVersionBranch =
+    dialog === "version"
+      ? releases.find(
+          (item) => item.name === versionName.trim() && item.branchName,
+        )?.branchName
+      : undefined;
+  const versionBranchPreview =
+    registeredVersionBranch ??
+    (dialog === "version" ? versionBranchName(stamp(), versionFeature) : "");
   const involvedServices = (value: Release) =>
     projectServices.filter((service) =>
       (value.serviceIds || []).includes(service.id),
@@ -272,6 +288,11 @@ export default function App() {
     setReleaseTab(tab);
     setCodeMode("content");
     setSearch("");
+  }
+  function openVersionForm() {
+    setVersionName(nextVersion(releases, projectId));
+    setVersionFeature("");
+    setDialog("version");
   }
   function updateRelease(updater: (current: Release) => Release) {
     if (release)
@@ -430,6 +451,7 @@ export default function App() {
           <thead>
             <tr>
               <th>版本 / 发布内容</th>
+              {!compact && <th>分支</th>}
               <th>状态</th>
               <th>变更资源</th>
               <th>更新时间</th>
@@ -453,6 +475,15 @@ export default function App() {
                     </span>
                   </button>
                 </td>
+                {!compact && (
+                  <td>
+                    {item.branchName ? (
+                      <code>{item.branchName}</code>
+                    ) : (
+                      <span className="muted">未登记</span>
+                    )}
+                  </td>
+                )}
                 <td>
                   {compact ? (
                     <Badge>{item.status}</Badge>
@@ -534,7 +565,7 @@ export default function App() {
         title="还没有版本"
         detail="先创建版本，把代码、SQL 和配置变化放在一起。"
         action={
-          <Button onClick={() => setDialog("version")}>
+          <Button onClick={openVersionForm}>
             <Plus size={15} />
             新建版本
           </Button>
@@ -644,7 +675,7 @@ export default function App() {
               <Settings2 size={16} />
               管理环境
             </Button>
-            <Button variant="primary" onClick={() => setDialog("version")}>
+            <Button variant="primary" onClick={openVersionForm}>
               <Plus size={17} />
               新建版本
             </Button>
@@ -867,7 +898,7 @@ export default function App() {
                 variant="primary"
                 className="full-width"
                 onClick={() =>
-                  release ? openRelease(release.id) : setDialog("version")
+                  release ? openRelease(release.id) : openVersionForm()
                 }
               >
                 {release ? "继续完善版本" : "新建版本"}
@@ -999,7 +1030,7 @@ export default function App() {
             <h1>版本管理</h1>
             <p>用一个版本串起代码、数据库脚本与配置更新。</p>
           </div>
-          <Button variant="primary" onClick={() => setDialog("version")}>
+          <Button variant="primary" onClick={openVersionForm}>
             <Plus size={17} />
             新建版本
           </Button>
@@ -1105,7 +1136,7 @@ export default function App() {
                 标记就绪
               </Button>
             ) : (
-              <Button onClick={() => setDialog("version")}>
+              <Button onClick={openVersionForm}>
                 <Copy size={15} />
                 复制为新版本
               </Button>
@@ -2308,7 +2339,7 @@ export default function App() {
           onClose={closeDialog}
         >
           <form
-            onSubmit={(event) => {
+            onSubmit={async (event) => {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
               const name = text(form, "name");
@@ -2318,6 +2349,10 @@ export default function App() {
                 )
               )
                 return notify("当前项目中已经存在这个版本号。");
+              const created = stamp();
+              const branchName =
+                registeredVersionBranch ?? versionBranchName(created, versionFeature);
+              if (!branchName) return notify("请填写功能标识。");
               const base = projectReleases.find(
                 (item) => item.id === text(form, "base"),
               );
@@ -2326,8 +2361,9 @@ export default function App() {
                 projectId,
                 name,
                 title: text(form, "title"),
+                branchName,
                 status: "草稿",
-                created: stamp(),
+                created,
                 author: "本地用户",
                 components: [],
                 serviceIds: versionServiceIds,
@@ -2345,7 +2381,16 @@ export default function App() {
                   previousContent: item.content,
                 })),
               };
-              setReleases((previous) => [newRelease, ...previous]);
+              try {
+                await workbench.update("releases", (previous) => [
+                  newRelease,
+                  ...previous,
+                ]);
+              } catch (error) {
+                notify(error instanceof Error ? error.message : "创建版本失败。");
+                void workbench.refresh().catch(() => {});
+                return;
+              }
               setReleaseId(newRelease.id);
               setVersionOpen(true);
               setReleaseTab("summary");
@@ -2365,9 +2410,35 @@ export default function App() {
               >
                 <input
                   name="name"
-                  defaultValue={nextVersion(releases, projectId)}
+                  value={versionName}
+                  onChange={(event) => setVersionName(event.target.value)}
                   required
                   maxLength={80}
+                />
+              </Field>
+              {!registeredVersionBranch && (
+                <Field label="功能标识" required>
+                  <input
+                    value={versionFeature}
+                    onChange={(event) => setVersionFeature(event.target.value)}
+                    placeholder="例如 版本分支"
+                    required
+                    maxLength={140}
+                  />
+                </Field>
+              )}
+              <Field
+                label="分支"
+                hint={
+                  registeredVersionBranch
+                    ? "自动沿用已登记的同版本分支。"
+                    : undefined
+                }
+              >
+                <input
+                  value={versionBranchPreview}
+                  placeholder="填写功能标识后生成"
+                  readOnly
                 />
               </Field>
               <Field label="发布内容" required>
@@ -2411,7 +2482,11 @@ export default function App() {
             </div>
             <div className="modal-footer">
               <Button onClick={closeDialog}>取消</Button>
-              <Button type="submit" variant="primary">
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={!!workbench.pending}
+              >
                 <Plus size={15} />
                 创建草稿版本
               </Button>

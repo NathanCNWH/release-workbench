@@ -48,6 +48,24 @@ const binding = z.object({
   branches: z.array(required).max(2000),
   defaultBranch: text,
 });
+const releaseBranch = required.refine((branch) => {
+  const match = /^feature\/zy_(\d{4})(\d{2})(\d{2})_(.+)$/u.exec(branch);
+  if (!match) return false;
+  const [, year, month, day] = match;
+  const calendarDate = `${year}-${month}-${day}`;
+  const date = new Date(`${calendarDate}T00:00:00Z`);
+  return (
+    Number.isFinite(date.getTime()) &&
+    date.toISOString().slice(0, 10) === calendarDate &&
+    !/[\u0000-\u0020\u007f~^:?*\[\\]/u.test(branch) &&
+    !branch.includes("..") &&
+    !branch.includes("@{") &&
+    !branch.endsWith(".") &&
+    branch.split("/").every(
+      (part) => part && !part.startsWith(".") && !part.endsWith(".lock"),
+    )
+  );
+}, "分支名须符合 feature/zy_yyyyMMdd_{功能} 及 Git 分支命名规则");
 const versionResourceKey = (version) =>
   JSON.stringify(
     {
@@ -96,6 +114,7 @@ const schemas = {
         projectId: id,
         name: required,
         title: required,
+        branchName: releaseBranch.optional(),
         status: z.enum(["草稿", "就绪", "已发布", "已归档"]),
         hidden: z.boolean().optional(),
         created: text,
@@ -343,9 +362,33 @@ export function validateCollection(store, name, input) {
     )
       throw new AppError("资料不能移动到其他项目");
   }
-  if (name === "releases")
+  if (name === "releases") {
+    const savedVersions = store.get(name).data;
+    const savedById = new Map(savedVersions.map((item) => [item.id, item]));
+    const branchesByName = new Map(
+      savedVersions
+        .filter((item) => item.branchName)
+        .map((item) => [item.name, item.branchName]),
+    );
     for (const item of data) {
-      const old = store.get(name).data.find((o) => o.id === item.id);
+      if (!item.branchName) continue;
+      const registeredBranch = branchesByName.get(item.name);
+      if (registeredBranch && item.branchName !== registeredBranch)
+        throw new AppError(
+          `版本「${item.name}」已登记分支「${registeredBranch}」，各项目须沿用同一分支名。`,
+        );
+      branchesByName.set(item.name, item.branchName);
+    }
+    for (const item of data) {
+      const old = savedById.get(item.id);
+      if (!old) {
+        item.branchName ??= branchesByName.get(item.name);
+        if (!item.branchName)
+          throw new AppError(
+            `首次创建版本「${item.name}」时，须登记 feature/zy_yyyyMMdd_{功能} 分支名。`,
+          );
+      } else if (old.branchName !== item.branchName)
+        throw new AppError(`版本「${item.name}」的分支创建后不能修改。`);
       item.components = []; // Actual service scope belongs exclusively to deployment snapshots.
       unique(item.serviceIds, (value) => value, "版本涉及服务不能重复");
       if (
@@ -368,6 +411,7 @@ export function validateCollection(store, name, input) {
           "版本资料已锁定，不能修改资源。请先单独切换为草稿。",
         );
     }
+  }
   if (name === "environments")
     for (const e of data) {
       unique(e.servers, (s) => s.id);

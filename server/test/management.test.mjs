@@ -80,7 +80,7 @@ test("MCP manages all six business entities with revisions and reference protect
     assert.equal(environment.servers.length, 0);
     const version = await create(
       { ...scope, entity: "version" },
-      { name: "20261021-01" },
+      { name: "20261021-01", branchName: "feature/zy_20261021_资料管理" },
     );
     assert.equal(version.components.length, 0);
     const sqlScope = { ...scope, versionId: version.id, entity: "sql" },
@@ -221,7 +221,11 @@ test("MCP manages all six business entities with revisions and reference protect
     );
     const fixed = await create(
       { entity: "version", projectId: p2.id },
-      { name: "20261021-02", status: "就绪" },
+      {
+        name: "20261021-02",
+        branchName: "feature/zy_20261021_版本就绪",
+        status: "就绪",
+      },
     );
     const fixedScope = { entity: "version", projectId: p2.id };
     await update(fixedScope, fixed.id, { status: "草稿" });
