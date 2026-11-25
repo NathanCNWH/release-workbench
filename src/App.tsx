@@ -450,8 +450,8 @@ export default function App() {
         <table className={`data-table ${compact ? "compact" : ""}`}>
           <thead>
             <tr>
-              <th>版本 / 发布内容</th>
-              {!compact && <th>分支</th>}
+              <th>{compact ? "版本 / 发布内容" : "分支描述"}</th>
+              {!compact && <th>分支名</th>}
               <th>状态</th>
               <th>变更资源</th>
               <th>更新时间</th>
@@ -469,10 +469,16 @@ export default function App() {
                     <span className="version-symbol">
                       <Package size={17} />
                     </span>
-                    <span>
-                      <strong>{item.name}</strong>
-                      <small>{item.title}</small>
-                    </span>
+                    {compact ? (
+                      <span>
+                        <strong>{item.name}</strong>
+                        <small>{item.title}</small>
+                      </span>
+                    ) : (
+                      <strong className="branch-description" title={item.title}>
+                        {item.title}
+                      </strong>
+                    )}
                   </button>
                 </td>
                 {!compact && (
@@ -1059,17 +1065,14 @@ export default function App() {
               <Search size={15} />
               <input
                 aria-label="搜索版本"
-                placeholder="搜索版本号、发布内容"
+                placeholder="搜索分支描述"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
           </div>
           {renderReleaseTable(filtered)}
-          <div className="table-footer">
-            共 {filtered.length} 个版本
-            <span>默认命名：年月日 + 当日序号，例如 20261020-01</span>
-          </div>
+          <div className="table-footer">共 {filtered.length} 个版本</div>
         </section>
         <Note>
           版本固定变更资料并可跨环境参考。Jenkins

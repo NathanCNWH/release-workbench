@@ -1516,6 +1516,12 @@ strong {
   letter-spacing: -0.1px;
   color: #425c3b;
 }
+.version-title .branch-description {
+  max-width: min(28rem, 42vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .version-title small {
   display: block;
   font-size: 11px;
