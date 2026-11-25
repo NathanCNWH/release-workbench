@@ -1043,10 +1043,12 @@ export default function App() {
 
   function renderVersions() {
     if (versionOpen && release?.id === releaseId) return renderReleaseDetail();
+    const matchesVersionFilter = (status: string, filter: string) =>
+      filter === "全部" ? status !== "已归档" : status === filter;
     const filtered = projectReleases
       .filter(
         (item) =>
-          (versionFilter === "全部" || item.status === versionFilter) &&
+          matchesVersionFilter(item.status, versionFilter) &&
           (!query || (item.name + item.title).includes(query)),
       )
       .sort((a, b) => releaseCreatedAt(b) - releaseCreatedAt(a));
@@ -1076,7 +1078,7 @@ export default function App() {
                   <span>
                     {
                       projectReleases.filter(
-                        (item) => label === "全部" || item.status === label,
+                        (item) => matchesVersionFilter(item.status, label),
                       ).length
                     }
                   </span>
