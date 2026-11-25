@@ -70,17 +70,17 @@ test("successful deployments set the environment's version status and preserve s
     );
     await until(() => store.deployment(production.id).status === "成功");
     assert.equal(store.get("releases").data[0].status, "已发布");
+    assert.throws(
+      () => update({ status: "草稿", serviceIds: ["s2"] }),
+      /不能修改资源/,
+    );
     const deployed = engine.run(engine.preview(input).id);
     await until(() => store.deployment(deployed.id).status === "成功");
     assert.equal(store.get("releases").data[0].status, "测试中");
     const snapshot = JSON.stringify(
       store.deployment(deployed.id).versionSnapshot,
     );
-    assert.throws(
-      () => update({ status: "草稿", serviceIds: ["s2"] }),
-      /不能.*修改资源/,
-    );
-    assert.equal(store.get("releases").data[0].status, "测试中");
+    assert.deepEqual(update({ serviceIds: ["s2"] }).record.serviceIds, ["s2"]);
     assert.equal(update({ status: "就绪" }).record.status, "就绪");
     const manuallyUpdated = store.get("releases");
     await engine.refresh(deployed.id);
@@ -88,7 +88,7 @@ test("successful deployments set the environment's version status and preserve s
     const stalePlan = engine.preview(input);
     assert.equal(update({ status: "草稿" }).record.status, "草稿");
     assert.throws(() => engine.run(stalePlan.id), /重新预览/);
-    update({ serviceIds: ["s2"], title: "重新编辑的版本" });
+    update({ title: "重新编辑的版本" });
     for (const [entity, recordId, data] of [
       ["sql", "sql1", { sql: "SELECT 2;" }],
       ["config", "cfg1", { content: "feature: true" }],

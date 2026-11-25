@@ -28,7 +28,8 @@ export function editVersion(store, input) {
   );
   if (!target || target.hidden)
     throw new AppError("当前项目的版本不存在。", 404);
-  if (target.status !== "草稿") throw new AppError("请先将版本切换为草稿。");
+  if (target.status === "已发布")
+    throw new AppError("已发布版本资料只读，请先调整版本状态。");
 
   const related = data.filter((item) => item.name === target.name);
   const registered = related.find((item) => item.branchName)?.branchName;

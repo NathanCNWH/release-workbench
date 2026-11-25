@@ -22,7 +22,7 @@ export default function LivePublishDialog({
   initialEnvironmentId,
   services,
   profiles,
-  version,
+  initialVersionIds,
   versions,
   onComplete,
   onClose,
@@ -34,7 +34,7 @@ export default function LivePublishDialog({
   initialEnvironmentId: string;
   services: Service[];
   profiles: JenkinsProfile[];
-  version?: Release;
+  initialVersionIds: string[];
   versions: Release[];
   onComplete: (record: Deployment) => void;
   onClose: () => void;
@@ -71,16 +71,14 @@ export default function LivePublishDialog({
       .map((s) => s.id);
   };
   const [selected, setSelected] = useState<string[]>(() =>
-    servicesForVersions(version ? [version.id] : []),
+    servicesForVersions(initialVersionIds),
   ),
     [branches, setBranches] = useState<Record<string, string>>({});
   const [plan, setPlan] = useState<any>(null),
     [record, setRecord] = useState<Deployment | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const [versionIds, setVersionIds] = useState<string[]>(
-    version ? [version.id] : [],
-  );
+  const [versionIds, setVersionIds] = useState(initialVersionIds);
   const [resolutions, setResolutions] = useState<Record<string, string>>({});
   const [merge, setMerge] = useState<VersionMerge | null>(null),
     [mergeError, setMergeError] = useState(""),

@@ -174,7 +174,7 @@ export default function App() {
   const [releases, setReleases] = useCollection("releases");
   const [environments, setEnvironments] = useCollection("environments");
   const deployments = workbench.state.deployments;
-  const [deployVersion, setDeployVersion] = useState<Release | undefined>();
+  const [deployVersionIds, setDeployVersionIds] = useState<string[]>([]);
   const [page, setPage] = useState<Page>("overview");
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
   const [releaseId, setReleaseId] = useState("");
@@ -185,6 +185,9 @@ export default function App() {
   const [configId, setConfigId] = useState("c1");
   const [codeMode, setCodeMode] = useState("content");
   const [versionFilter, setVersionFilter] = useState("全部");
+  const [checkedVersionIds, setCheckedVersionIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -281,6 +284,7 @@ export default function App() {
   }
   function selectProject(id: string) {
     if (id !== projectId && !canLeaveNotes()) return false;
+    if (id !== projectId) setCheckedVersionIds(new Set());
     setProjectId(id);
     setReleaseId(visibleReleases.find((item) => item.projectId === id)?.id || "");
     setEnvironmentId(
@@ -364,7 +368,8 @@ export default function App() {
           (item) => item.id === target.id,
         );
         if (
-          latest?.status !== "草稿" ||
+          !latest ||
+          latest.status === "已发布" ||
           latest.name !== version.name ||
           JSON.stringify(latestConfig) !== JSON.stringify(target)
         ) {
@@ -389,8 +394,20 @@ export default function App() {
     setDetailDeployment(item);
     setDialog("deployment-detail");
   }
-  function openDeploy(version?: Release) {
-    setDeployVersion(version);
+  function setVersionsChecked(ids: string[], checked: boolean) {
+    setCheckedVersionIds((previous) => {
+      const next = new Set(previous);
+      for (const id of ids) {
+        if (checked) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }
+  function openDeploy(versionIds: string[] = []) {
+    if (versionIds.length > 100)
+      return notify("每次发布最多选择 100 个版本。");
+    setDeployVersionIds(versionIds);
     setDialog("deploy");
   }
   function closeDialog() {
@@ -467,11 +484,32 @@ export default function App() {
   ]);
 
   function renderReleaseTable(items: Release[], compact = false) {
+    const allChecked = items.every((item) => checkedVersionIds.has(item.id));
+    const partlyChecked =
+      !allChecked && items.some((item) => checkedVersionIds.has(item.id));
     return items.length ? (
       <div className="table-scroll">
         <table className={`data-table ${compact ? "compact" : ""}`}>
           <thead>
             <tr>
+              {!compact && (
+                <th className="version-selection">
+                  <input
+                    type="checkbox"
+                    aria-label="全选当前列表版本"
+                    checked={allChecked}
+                    ref={(input) => {
+                      if (input) input.indeterminate = partlyChecked;
+                    }}
+                    onChange={(event) =>
+                      setVersionsChecked(
+                        items.map((item) => item.id),
+                        event.currentTarget.checked,
+                      )
+                    }
+                  />
+                </th>
+              )}
               <th>{compact ? "版本 / 发布内容" : "分支描述"}</th>
               {!compact && <th>分支名</th>}
               <th>状态</th>
@@ -483,6 +521,18 @@ export default function App() {
           <tbody>
             {items.map((item) => (
               <tr key={item.id}>
+                {!compact && (
+                  <td className="version-selection">
+                    <input
+                      type="checkbox"
+                      aria-label={`选择版本 ${item.title}`}
+                      checked={checkedVersionIds.has(item.id)}
+                      onChange={(event) =>
+                        setVersionsChecked([item.id], event.currentTarget.checked)
+                      }
+                    />
+                  </td>
+                )}
                 <td>
                   <button
                     className="version-title"
@@ -570,16 +620,27 @@ export default function App() {
                       <ChevronRight size={14} />
                     </button>
                     {!compact && (
-                      <button
-                        type="button"
-                        className="text-button"
-                        aria-label={`隐藏版本 ${item.name}`}
-                        disabled={!!workbench.pending}
-                        onClick={() => hideRelease(item)}
-                      >
-                        <EyeOff size={14} />
-                        隐藏
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="text-button"
+                          aria-label={`发布版本 ${item.title}`}
+                          onClick={() => openDeploy([item.id])}
+                        >
+                          <Play size={14} />
+                          发布
+                        </button>
+                        <button
+                          type="button"
+                          className="text-button"
+                          aria-label={`隐藏版本 ${item.name}`}
+                          disabled={!!workbench.pending}
+                          onClick={() => hideRelease(item)}
+                        >
+                          <EyeOff size={14} />
+                          隐藏
+                        </button>
+                      </>
                     )}
                   </div>
                 </td>
@@ -1052,6 +1113,9 @@ export default function App() {
           (!query || (item.name + item.title).includes(query)),
       )
       .sort((a, b) => releaseCreatedAt(b) - releaseCreatedAt(a));
+    const selected = filtered
+      .filter((item) => checkedVersionIds.has(item.id))
+      .map((item) => item.id);
     return (
       <>
         <div className="page-heading">
@@ -1060,10 +1124,19 @@ export default function App() {
             <h1>版本管理</h1>
             <p>用一个版本串起代码、数据库脚本与配置更新。</p>
           </div>
-          <Button variant="primary" onClick={openVersionForm}>
-            <Plus size={17} />
-            新建版本
-          </Button>
+          <div className="actions">
+            <Button
+              disabled={!selected.length}
+              onClick={() => openDeploy(selected)}
+            >
+              <Play size={15} />
+              批量发布{selected.length ? `（${selected.length}）` : ""}
+            </Button>
+            <Button variant="primary" onClick={openVersionForm}>
+              <Plus size={17} />
+              新建版本
+            </Button>
+          </div>
         </div>
         <section className="panel">
           <div className="list-toolbar">
@@ -1098,17 +1171,14 @@ export default function App() {
           {renderReleaseTable(filtered)}
           <div className="table-footer">共 {filtered.length} 个版本</div>
         </section>
-        <Note>
-          版本固定变更资料并可跨环境参考。Jenkins
-          发布独立选择环境、服务和分支，SQL 与配置由人工处理。
-        </Note>
       </>
     );
   }
 
   function renderReleaseDetail() {
     if (!release) return null;
-    const editable = release.status === "草稿";
+    const isDraft = release.status === "草稿";
+    const editable = release.status !== "已发布";
     return (
       <>
         <button className="back-link" onClick={() => setVersionOpen(false)}>
@@ -1165,11 +1235,11 @@ export default function App() {
                 编辑版本
               </Button>
             )}
-            {editable ? (
+            {isDraft ? (
               <Button
                 onClick={() => {
                   updateRelease((value) => ({ ...value, status: "就绪" }));
-                  notify("已提交就绪状态，版本资源随之锁定。");
+                  notify("已标记就绪。");
                 }}
               >
                 <Check size={15} />
@@ -1194,7 +1264,7 @@ export default function App() {
                       ),
                     )
                     .then(() =>
-                      notify("已取消就绪，版本恢复为草稿，可以继续编辑。"),
+                      notify("已取消就绪，版本恢复为草稿。"),
                     )
                     .catch((error) => notify(`取消就绪失败：${error.message}`));
                 }}
@@ -1210,7 +1280,7 @@ export default function App() {
               <EyeOff size={15} />
               隐藏版本
             </Button>
-            <Button variant="primary" onClick={() => openDeploy(release)}>
+            <Button variant="primary" onClick={() => openDeploy([release.id])}>
               <Play size={15} />
               发布
             </Button>
@@ -1334,13 +1404,13 @@ export default function App() {
                     <CheckCircle2 size={15} />
                     配置秘密使用变量引用
                   </span>
-                  <span className={editable ? "muted" : ""}>
-                    {editable ? (
+                  <span className={isDraft ? "muted" : ""}>
+                    {isDraft ? (
                       <Clock3 size={15} />
                     ) : (
                       <CheckCircle2 size={15} />
                     )}
-                    {editable
+                    {isDraft
                       ? "草稿待标记就绪"
                       : `版本状态为${release.status}`}
                   </span>
@@ -1357,8 +1427,7 @@ export default function App() {
                   </div>
                 ))}
                 <p className="small muted">
-                  就绪状态用于固定版本资料，不限制 Jenkins
-                  发布。实际任务与分支以发布记录为准。
+                  实际任务与分支以发布记录为准。
                 </p>
               </aside>
             </div>
@@ -1636,7 +1705,7 @@ export default function App() {
             <div className="component-section">
               <SectionHeading
                 title="本版本涉及服务"
-                description="勾选本次变更涉及的项目服务，可以暂时留空，草稿期间随时补充。"
+                description="勾选本次变更涉及的项目服务，可以暂时留空。"
               />
               <VersionServiceEditor
                 key={release.id}
@@ -1685,9 +1754,7 @@ export default function App() {
         {!editable && (
           <Note>
             <LockKeyhole size={14} />
-            {release.status === "就绪"
-              ? "版本资料已锁定，点击顶部“取消就绪”可恢复草稿并继续编辑。"
-              : "版本资料已锁定。返回版本列表切换为草稿后即可编辑。"}
+            已发布版本资料只读。可在版本列表调整状态后再编辑。
           </Note>
         )}
       </>
@@ -2214,17 +2281,11 @@ export default function App() {
             </span>
           </div>
         </header>
-        <div className="prototype-notice">
-          <span>
-            <span className="prototype-dot" />
-            本地应用
-          </span>
-          <p>
-            {workbench.pending
-              ? "正在保存…"
-              : "资料保存到本机 SQLite · Jenkins 发布"}
-          </p>
-        </div>
+        {workbench.pending > 0 && (
+          <div className="saving-notice" role="status">
+            正在保存…
+          </div>
+        )}
         {workbench.error && (
           <div className="error-message persist-error" role="alert">
             {workbench.error}
@@ -2862,7 +2923,7 @@ export default function App() {
           initialEnvironmentId={environment?.id || ""}
           services={projectServices}
           profiles={jenkinsProfiles}
-          version={projectReleases.find((item) => item.id === deployVersion?.id)}
+          initialVersionIds={deployVersionIds}
           versions={releases.filter((item) => item.projectId === projectId)}
           onComplete={() => void workbench.refresh()}
           onClose={closeDialog}

@@ -148,7 +148,7 @@ tool(
 );
 tool(
   "record_update",
-  "按 data 中的字段部分更新业务资料，revision 使用最近查询值。版本状态可单独切换为草稿、就绪、测试中、已发布或已归档。编辑版本资源前先将状态切为草稿。保留 environment 中不变的 servers/bindings 内容后再提交这两个数组。",
+  "按 data 中的字段部分更新业务资料，revision 使用最近查询值。版本状态可单独切换为草稿、就绪、测试中、已发布或已归档。已发布版本的资源只读，编辑前先单独调整版本状态。保留 environment 中不变的 servers/bindings 内容后再提交这两个数组。",
   {
     ...scope,
     recordId: z.string(),
@@ -160,7 +160,7 @@ tool(
 );
 tool(
   "record_delete",
-  "删除无引用资料，需用户授权并 confirmed=true。引用、固定版本和发布历史受保护；固定版本可归档。SQL/config 仅删除草稿资料中的条目，不操作数据库或服务器。",
+  "删除无引用资料，需用户授权并 confirmed=true。引用、固定版本和发布历史受保护，固定版本可归档。SQL/config 可删除非已发布版本中的工作台资料条目。",
   {
     ...scope,
     recordId: z.string(),

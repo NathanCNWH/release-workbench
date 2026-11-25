@@ -34,7 +34,7 @@ test("SQLite persists business data and secrets are encrypted and omitted from p
     save(
       store,
       "releases",
-      versions.map((r) => ({ ...r, status: "就绪" })),
+      versions.map((r) => ({ ...r, status: "已发布" })),
     );
     assert.throws(
       () =>
@@ -43,7 +43,7 @@ test("SQLite persists business data and secrets are encrypted and omitted from p
           "releases",
           versions.map((r) => ({
             ...r,
-            status: "就绪",
+            status: "已发布",
             title: "illegal edit",
           })),
         ),

@@ -5,7 +5,7 @@ import { Deployments } from "../deployments.mjs";
 import { mergeVersions } from "../versions.mjs";
 import { temporary, seed, save } from "./helpers.mjs";
 
-test("version service scope rejects foreign and duplicate references, protects fixed versions and does not select deployment services", async () => {
+test("version service scope rejects invalid references, protects published versions and does not select deployment services", async () => {
   const temp = await temporary(),
     store = new Store(temp.path);
   try {
@@ -53,10 +53,17 @@ test("version service scope rejects foreign and duplicate references, protects f
     save(store, "releases", [
       { ...version, serviceIds: ["s1"], status: "就绪" },
     ]);
+    const ready = save(store, "releases", [
+      { ...version, serviceIds: ["s2"], status: "就绪" },
+    ]).data[0];
+    assert.deepEqual(ready.serviceIds, ["s2"]);
+    save(store, "releases", [
+      { ...ready, serviceIds: ["s1"], status: "已发布" },
+    ]);
     assert.throws(
       () =>
         save(store, "releases", [
-          { ...version, serviceIds: ["s2"], status: "就绪" },
+          { ...ready, status: "已发布" },
         ]),
       /不能修改资源/,
     );

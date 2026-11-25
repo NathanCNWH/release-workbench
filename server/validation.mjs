@@ -428,11 +428,11 @@ export function validateCollection(store, name, input) {
       unique(item.configs, (c) => c.id);
       if (
         old &&
-        old.status !== "草稿" &&
+        old.status === "已发布" &&
         versionResourceKey(old) !== versionResourceKey(item)
       )
         throw new AppError(
-          "版本资料已锁定，不能修改资源。请先单独切换为草稿。",
+          "已发布版本不能修改资源。请先单独调整版本状态。",
         );
     }
   }
