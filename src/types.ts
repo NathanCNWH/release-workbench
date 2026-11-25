@@ -94,6 +94,7 @@ export interface Release {
   name: string;
   title: string;
   status: ReleaseStatus;
+  hidden?: boolean;
   created: string;
   author: string;
   serviceIds?: string[];

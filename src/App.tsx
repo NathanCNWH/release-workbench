@@ -14,6 +14,7 @@ import {
   Code2,
   Copy,
   Database,
+  EyeOff,
   FileCode2,
   FileText,
   FolderGit2,
@@ -206,7 +207,8 @@ export default function App() {
       services: [],
     };
   const projectServices = project.services;
-  const projectReleases = releases.filter(
+  const visibleReleases = releases.filter((item) => !item.hidden);
+  const projectReleases = visibleReleases.filter(
     (item) => item.projectId === projectId,
   );
   const involvedServices = (value: Release) =>
@@ -254,7 +256,7 @@ export default function App() {
   function selectProject(id: string) {
     if (id !== projectId && !canLeaveNotes()) return false;
     setProjectId(id);
-    setReleaseId(releases.find((item) => item.projectId === id)?.id || "");
+    setReleaseId(visibleReleases.find((item) => item.projectId === id)?.id || "");
     setEnvironmentId(
       environments.find((item) => item.projectId === id)?.id || "",
     );
@@ -276,6 +278,33 @@ export default function App() {
       setReleases((previous) =>
         previous.map((item) => (item.id === release.id ? updater(item) : item)),
       );
+  }
+  function hideRelease(version: Release) {
+    if (
+      !window.confirm(
+        `隐藏版本「${version.name}」？\n此版本将移出版本列表和选择项，相关发布记录仍可查看。`,
+      )
+    )
+      return;
+
+    void workbench
+      .update("releases", (versions) => {
+        const latest = versions.find((item) => item.id === version.id);
+        if (
+          !latest ||
+          latest.projectId !== version.projectId ||
+          latest.name !== version.name
+        )
+          throw new Error("版本已更新，请核对后再隐藏。");
+
+        return versions.map((item) =>
+          item.id === latest.id ? { ...item, hidden: true } : item,
+        );
+      })
+      .then(() => notify(`已隐藏版本「${version.name}」。`))
+      .catch(() => {
+        void workbench.refresh().catch(() => {});
+      });
   }
   function removeConfig(version: Release, target: ConfigFile) {
     if (
@@ -889,8 +918,9 @@ export default function App() {
                   <span>
                     <b>
                       {
-                        releases.filter((value) => value.projectId === item.id)
-                          .length
+                        visibleReleases.filter(
+                          (value) => value.projectId === item.id,
+                        ).length
                       }
                     </b>{" "}
                     个版本
@@ -939,7 +969,7 @@ export default function App() {
   }
 
   function renderVersions() {
-    if (versionOpen && release) return renderReleaseDetail();
+    if (versionOpen && release?.id === releaseId) return renderReleaseDetail();
     const filtered = projectReleases
       .filter(
         (item) =>
@@ -1088,6 +1118,13 @@ export default function App() {
                 取消就绪
               </Button>
             )}
+            <Button
+              disabled={!!workbench.pending}
+              onClick={() => hideRelease(release)}
+            >
+              <EyeOff size={15} />
+              隐藏版本
+            </Button>
             <Button variant="primary" onClick={() => openDeploy(release)}>
               <Play size={15} />
               发布
@@ -1926,7 +1963,7 @@ export default function App() {
       )
     : [];
   const matchingReleases = search
-    ? releases.filter((item) =>
+    ? visibleReleases.filter((item) =>
         (item.name + item.title).toLowerCase().includes(search.toLowerCase()),
       )
     : [];
@@ -2261,9 +2298,13 @@ export default function App() {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
               const name = text(form, "name");
-              if (projectReleases.some((item) => item.name === name))
+              if (
+                releases.some(
+                  (item) => item.projectId === projectId && item.name === name,
+                )
+              )
                 return notify("当前项目中已经存在这个版本号。");
-              const base = releases.find(
+              const base = projectReleases.find(
                 (item) => item.id === text(form, "base"),
               );
               const newRelease: Release = {
@@ -2666,8 +2707,8 @@ export default function App() {
           initialEnvironmentId={environment?.id || ""}
           services={projectServices}
           profiles={jenkinsProfiles}
-          version={deployVersion}
-          versions={projectReleases}
+          version={projectReleases.find((item) => item.id === deployVersion?.id)}
+          versions={releases.filter((item) => item.projectId === projectId)}
           onComplete={() => void workbench.refresh()}
           onClose={closeDialog}
           onConfigure={() => {

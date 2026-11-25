@@ -50,7 +50,12 @@ const binding = z.object({
 });
 const versionResourceKey = (version) =>
   JSON.stringify(
-    { ...version, serviceIds: version.serviceIds || [], status: "" },
+    {
+      ...version,
+      hidden: undefined,
+      serviceIds: version.serviceIds || [],
+      status: "",
+    },
     (_key, value) =>
       value && typeof value === "object" && !Array.isArray(value)
         ? Object.fromEntries(
@@ -92,6 +97,7 @@ const schemas = {
         name: required,
         title: required,
         status: z.enum(["草稿", "就绪", "已发布", "已归档"]),
+        hidden: z.boolean().optional(),
         created: text,
         author: text,
         serviceIds: z.array(id).max(300).default([]),

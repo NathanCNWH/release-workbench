@@ -234,7 +234,9 @@ export default function LivePublishDialog({
           ) : (
             <>
               <VersionPicker
-                versions={versions}
+                versions={versions.filter(
+                  (item) => !item.hidden || versionIds.includes(item.id),
+                )}
                 selected={versionIds}
                 disabled={busy}
                 onChange={(ids) => {
