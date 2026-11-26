@@ -17,7 +17,7 @@ export function gitLabRepository(address) {
       return null;
     const host = (http ? url.host : url.hostname).toLowerCase();
     if (!host) return null;
-    const apiAddress = "https://" + host;
+    const apiAddress = http ? url.origin : "https://" + host;
     return {
       key: host + "/" + parts.map(encodeURIComponent).join("/"),
       host, apiAddress, projectPath: parts.join("/"),
@@ -28,16 +28,19 @@ export function gitLabRepository(address) {
   }
 }
 
-export function gitLabApiAddress(value) {
+export function gitLabApiAddress(value, repository) {
   try {
     const url = new URL(value);
-    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash)
+    const registeredHttp = url.protocol === "http:" &&
+      url.origin === repository.credentialUrl.origin;
+    if ((!registeredHttp && url.protocol !== "https:") ||
+        url.username || url.password || url.search || url.hash)
       throw new Error();
     const path = url.pathname.replace(/\/+$/, "").replace(/\/api\/v4$/, "");
     decodeURIComponent(path);
     return url.origin + path;
   } catch {
-    throw new AppError("请填写可校验 HTTPS 证书的 GitLab 地址，例如 https://gitlab.example.com。");
+    throw new AppError("请输入 HTTPS 地址，或与登记仓库同源的 HTTP 地址。");
   }
 }
 
@@ -47,8 +50,8 @@ function readCredential(url, signal) {
     "-c", "credential.provider=generic",
     "-c", "credential.allowWindowsAuth=false",
   ];
-  // Git Credential Manager can store keys under an old HTTP URL. This is
-  // the local credential lookup only. API requests below always use TLS.
+  // Allow the local lookup of an existing HTTP credential. API requests
+  // are checked against the registered origin separately.
   if (url.protocol === "http:")
     args.push("-c", "credential.allowUnsafeRemotes=true");
   return new Promise((resolve, reject) => {
@@ -83,14 +86,14 @@ function requestError(error, signal) {
   if (signal.aborted || error.name === "TimeoutError")
     return new AppError("GitLab API 请求超时，请重新读取后再试。", 504);
   if (/CERT|ISSUER|SELF_SIGNED|SIGNATURE/.test(String(error.cause?.code)))
-    return new AppError("GitLab HTTPS 证书校验失败，请检查证书或在 GitLab 设置使用可用的 HTTPS 地址。", 502);
-  return new AppError("无法连接 GitLab API，请核对 HTTPS 地址及网络。", 502);
+    return new AppError("GitLab HTTPS 证书校验失败，请检查当前使用的 GitLab 地址和证书。", 502);
+  return new AppError("无法连接 GitLab API，请核对地址及网络。", 502);
 }
 
 export async function connectGitLab(repository, address, requestSignal) {
   const limit = AbortSignal.timeout(40000);
   const signal = requestSignal ? AbortSignal.any([limit, requestSignal]) : limit;
-  const base = gitLabApiAddress(address);
+  const base = gitLabApiAddress(address, repository);
   const password = await readCredential(repository.credentialUrl, signal);
 
   async function request(path, body, method = "GET") {

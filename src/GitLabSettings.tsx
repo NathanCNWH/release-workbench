@@ -74,7 +74,7 @@ function RepositoryForm({ projectId, repository, revision, onSave }: RepositoryF
   return (
     <form className="gitlab-settings-form" onSubmit={(event) => void save(event)}>
       <div className="form-grid gitlab-inputs">
-        <Field label="GitLab API 地址" hint="填写此 GitLab 实例的 HTTPS 地址。同一项目内同一主机的仓库共用。">
+        <Field label="GitLab API 地址" hint="留空使用默认地址。HTTP 地址须与已登记的仓库同源。">
           <input
             type="url"
             value={apiAddress}

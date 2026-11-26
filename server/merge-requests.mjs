@@ -42,7 +42,9 @@ function projectRepositories(store, projectId, serviceIds) {
     let group = repositories.get(repositoryKey);
     if (!group) {
       const defaults = settings?.repositories.find((item) => item.key === repositoryKey);
-      const apiAddress = settings?.connections.find((item) => item.host === location?.host)?.address ?? "";
+      const address = settings?.connections.find((item) => item.host === location?.host)?.address ?? "";
+      const apiAddress = address.startsWith("http://") && location?.credentialUrl.protocol !== "http:"
+        ? "" : address;
       group = {
         location,
         repositoryKey,
@@ -263,7 +265,7 @@ export class MergeRequests {
   async save(raw) {
     const input = parse(settingsInput, raw);
     const target = this.getRepository(input);
-    const address = input.apiAddress ? gitLabApiAddress(input.apiAddress) : "";
+    const address = input.apiAddress ? gitLabApiAddress(input.apiAddress, target.location) : "";
     let assignee = input.assigneeId === null ? null : target.defaultAssignee;
     if (input.assigneeId !== null && input.assigneeId !== assignee?.id) {
       const remote = await openProject(target, address || target.defaultApiAddress);
