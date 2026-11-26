@@ -417,12 +417,15 @@ export default function App() {
   function closeDialog() {
     setDialog(null);
   }
-  async function copy(value: string) {
+  async function copy(
+    value: string,
+    failureMessage = "当前浏览器不允许复制，请使用导出按钮。",
+  ) {
     try {
       await navigator.clipboard.writeText(value);
       notify("已复制到剪贴板。");
     } catch {
-      notify("当前浏览器不允许复制，请使用导出按钮。");
+      notify(failureMessage);
     }
   }
 
@@ -560,7 +563,22 @@ export default function App() {
                 {!compact && (
                   <td>
                     {item.branchName ? (
-                      <code>{item.branchName}</code>
+                      <button
+                        type="button"
+                        className="branch-name-copy"
+                        value={item.branchName}
+                        title="点击复制分支名"
+                        aria-label={`复制分支名 ${item.branchName}`}
+                        onClick={(event) =>
+                          copy(
+                            event.currentTarget.value,
+                            "当前浏览器不允许复制分支名。",
+                          )
+                        }
+                      >
+                        <code>{item.branchName}</code>
+                        <Copy size={13} aria-hidden="true" />
+                      </button>
                     ) : (
                       <span className="muted">未登记</span>
                     )}

@@ -1453,6 +1453,19 @@ strong {
 .data-table code {
   font-size: 12px;
 }
+.branch-name-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--green);
+}
+.branch-name-copy:hover code {
+  text-decoration: underline;
+}
 .data-table.compact td,
 .data-table.compact th {
   padding-left: 20px;
