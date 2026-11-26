@@ -4,6 +4,7 @@ export type Page =
   | "services"
   | "notes"
   | "jenkins"
+  | "gitlab"
   | "versions"
   | "environments"
   | "deployments"

@@ -19,6 +19,7 @@ import {
   FileText,
   FolderGit2,
   GitBranch,
+  GitPullRequest,
   HardDrive,
   History,
   Info,
@@ -66,6 +67,8 @@ import {
 import EnvironmentEditor from "./EnvironmentConfigEditor";
 import ServiceManager, { ProjectServiceFields } from "./ServiceManager";
 import JenkinsSettings from "./JenkinsSettings";
+import GitLabMergeDialog from "./GitLabMergeDialog";
+import GitLabSettings from "./GitLabSettings";
 import PublishDialog, { DeploymentDetail } from "./LivePublishDialog";
 import BackupsPage from "./BackupsPage";
 import AIConnectionInfo from "./AIConnectionInfo";
@@ -175,6 +178,7 @@ export default function App() {
   const [environments, setEnvironments] = useCollection("environments");
   const deployments = workbench.state.deployments;
   const [deployVersionIds, setDeployVersionIds] = useState<string[]>([]);
+  const [gitLabRelease, setGitLabRelease] = useState<Release | null>(null);
   const [page, setPage] = useState<Page>("overview");
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
   const [releaseId, setReleaseId] = useState("");
@@ -629,6 +633,15 @@ export default function App() {
                         >
                           <Play size={14} />
                           发布
+                        </button>
+                        <button
+                          type="button"
+                          className="text-button"
+                          aria-label={"创建 GitLab MR " + item.title}
+                          onClick={() => setGitLabRelease(item)}
+                        >
+                          <GitPullRequest size={14} />
+                          创建 MR
                         </button>
                         <button
                           type="button"
@@ -1209,6 +1222,10 @@ export default function App() {
             </div>
           </div>
           <div className="actions">
+            <Button onClick={() => setGitLabRelease(release)}>
+              <GitPullRequest size={15} />
+              创建 GitLab MR
+            </Button>
             <Button
               onClick={() => {
                 downloadText(
@@ -2096,6 +2113,14 @@ export default function App() {
     jenkins: () => (
       <JenkinsSettings profiles={jenkinsProfiles} notify={notify} />
     ),
+    gitlab: () => (
+      <GitLabSettings
+        key={project.id}
+        projectId={project.id}
+        projectName={project.name}
+        notify={notify}
+      />
+    ),
     projects: renderProjects,
     versions: renderVersions,
     environments: renderEnvironments,
@@ -2108,7 +2133,9 @@ export default function App() {
   const pageTitle =
     page === "jenkins"
       ? "Jenkins 设置"
-      : navigation.find((item) => item.id === page)?.title;
+      : page === "gitlab"
+        ? "GitLab 设置"
+        : navigation.find((item) => item.id === page)?.title;
   const matchingProjects = search
     ? projects.filter((item) =>
         (item.name + item.key).toLowerCase().includes(search.toLowerCase()),
@@ -2179,6 +2206,13 @@ export default function App() {
             <Settings2 size={18} />
             <span>Jenkins 设置</span>
             <span className="nav-small">共享</span>
+          </button>
+          <button
+            className={page === "gitlab" ? "active" : ""}
+            onClick={() => navigate("gitlab")}
+          >
+            <GitPullRequest size={18} />
+            <span>GitLab 设置</span>
           </button>
         </nav>
         <div className="sidebar-bottom">
@@ -2600,6 +2634,18 @@ export default function App() {
             </div>
           </form>
         </Modal>
+      )}
+
+      {gitLabRelease && (
+        <GitLabMergeDialog
+          key={gitLabRelease.id}
+          release={gitLabRelease}
+          onClose={() => setGitLabRelease(null)}
+          onSettings={() => {
+            setGitLabRelease(null);
+            navigate("gitlab");
+          }}
+        />
       )}
 
       {dialog === "version-edit" && editingVersion && (

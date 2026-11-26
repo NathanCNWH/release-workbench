@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { resolve, dirname, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Store, AppError, collections } from "./store.mjs";
+import { Store, AppError, collections, gitLabSettingsCollection } from "./store.mjs";
 import { validateCollection } from "./validation.mjs";
 import { Jenkins } from "./jenkins.mjs";
 import { Deployments } from "./deployments.mjs";
@@ -18,6 +18,7 @@ import { checkMysql, checkSsh } from "./connections.mjs";
 import { acquireLock } from "./lock.mjs";
 import { editVersion, mergeVersions } from "./versions.mjs";
 import { checkVersionBranches } from "./git-branches.mjs";
+import { MergeRequests } from "./merge-requests.mjs";
 import { recordOperation } from "./records.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -43,7 +44,8 @@ export async function createApp({
     throw error;
   }
   const engine = new Deployments(store, monitorOptions),
-    backups = new Backups(store);
+    backups = new Backups(store),
+    mergeRequests = new MergeRequests(store);
   const tokenPath = resolve(directory, ".api-token");
   if (!existsSync(tokenPath))
     writeFileSync(tokenPath, randomBytes(32).toString("hex"), {
@@ -140,6 +142,27 @@ export async function createApp({
         if (!res.destroyed) json(res, 200, result);
         return;
       }
+      if (path === "/api/gitlab/settings") {
+        if (req.method === "GET")
+          return json(res, 200, mergeRequests.settings(url.searchParams.get("projectId")));
+        if (req.method === "PUT")
+          return json(res, 200, await mergeRequests.save(await body(req)));
+      }
+      if (req.method === "POST" && (
+        path === "/api/gitlab/connection/check" || path === "/api/gitlab/merge-requests/preview"
+      )) {
+        const input = await body(req);
+        if (res.destroyed) return;
+        const controller = new AbortController();
+        res.once("close", () => controller.abort());
+        const result = path === "/api/gitlab/connection/check"
+          ? await mergeRequests.check(input, controller.signal)
+          : await mergeRequests.preview(input, controller.signal);
+        if (!res.destroyed) json(res, 200, result);
+        return;
+      }
+      if (req.method === "POST" && path === "/api/gitlab/merge-requests/submit")
+        return json(res, 200, await mergeRequests.submit(await body(req)));
       if (req.method === "GET" && path === "/api/info")
         return json(res, 200, {
           dataDirectory: store.directory,
@@ -170,7 +193,7 @@ export async function createApp({
           input = await body(req);
         if (!Number.isInteger(input.revision))
           throw new AppError("缺少资料修订号", 409);
-        if (!collections.includes(name))
+        if (!collections.includes(name) || name === gitLabSettingsCollection)
           throw new AppError("未知资料类型", 404);
         const data = validateCollection(store, name, input.data);
         store.save(name, data, input.revision);

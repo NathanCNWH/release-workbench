@@ -19,12 +19,14 @@ export const blankProfiles = [
     credentialConfigured: false,
   },
 ];
+export const gitLabSettingsCollection = "gitLabSettings";
 export const collections = [
   "projects",
   "releases",
   "environments",
   "jenkinsProfiles",
   "projectNotes",
+  gitLabSettingsCollection,
 ];
 const versionStatusByEnvironment = new Map([
   ["测试", "测试中"],

@@ -5001,3 +5001,64 @@ strong {
   .project-note-source { min-height: 340px; }
   .project-note-tabs > span { display: none; }
 }
+
+
+.gitlab-body,
+.gitlab-settings-form {
+  display: grid;
+  gap: 16px;
+}
+
+.gitlab-repository {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.gitlab-repository-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.gitlab-repository-heading > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.gitlab-repository code,
+.gitlab-body > .inline code {
+  overflow-wrap: anywhere;
+}
+
+.gitlab-repository p,
+.gitlab-settings-form p {
+  margin: 0;
+}
+
+.gitlab-existing {
+  flex-wrap: wrap;
+}
+
+.gitlab-footer {
+  flex-wrap: wrap;
+}
+
+.gitlab-footer > :first-child {
+  margin-right: auto;
+}
+
+.gitlab-settings > .field,
+.gitlab-settings > .gitlab-settings-form,
+.gitlab-settings > .error-message,
+.gitlab-settings > p {
+  margin: 0 24px 20px;
+}
+
+.gitlab-inputs > .field {
+  min-width: 0;
+}
